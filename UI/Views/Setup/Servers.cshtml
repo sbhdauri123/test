@@ -1,0 +1,456 @@
+﻿@{
+
+    List<SelectListItem> TimeZones = (List<SelectListItem>)ViewBag.TimeZones;
+
+    ViewBag.Title = "Servers";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="dragoMain" id="userTableContainer">
+    <div id="gridContainer" class="toolControlContainer tc-Main">
+        <header>
+            <h2>Server Setup</h2>            
+        </header>
+        <div id="kGrid" class="toolControl">
+        </div>
+    </div>
+</div>
+@*<script src="~/js/signalr/dist/browser/signalr.js"></script>*@
+
+<script src="~/Scripts/Greenhouse/common.js"></script>
+<script type="text/javascript">
+
+    $(function ()
+    {
+        //var serverHub = $.connection.serverHub;
+        //var serverHub = new signalR.HubConnectionBuilder().withUrl("/serverHub").build();
+
+        var dsTimeZones = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(TimeZones));
+
+        //var dsServerTypes = LookupDataSourceCommaDelimit("ServerType");
+        var dsServerTypes = GetDataSource("GetServerTypes", "ServerTypeID", "ServerTypeName");
+        dsServerTypes.fetch();
+        var dsClusters = GetDataSource("GetClusters", "ClusterID", "ClusterName");
+        dsClusters.fetch();
+        var dsExecutionTypes = GetDataSource("GetExecutionTypes", "ExecutionTypeID", "ExecutionTypeName");
+        dsExecutionTypes.fetch();
+        var tplData = kendo.template($("#tplDataDisplayName").html());
+        var tplcheck = kendo.template($("#tplCheck").html());
+        
+        var url = "/serverHub";
+
+        var serverHub = new signalR.HubConnectionBuilder()
+            .withUrl(url, {
+                transport: signalR.HttpTransportType.LongPolling
+            })
+            .build();
+        
+        async function start() {
+            try {
+                await serverHub.start();
+                console.log("serverHub Connected.");
+            } catch (err) {
+                console.log(err);
+                setTimeout(start, 5000);
+            }
+        };
+
+        serverHub.onclose(async () => {
+            await start();
+        });
+
+        // Start the connection.
+        var hubStart = start();
+
+
+        $("#kGrid").kendoGrid({
+            dataSource: ServersDataSource()
+            , columns: [
+                 {
+                     command: [
+
+                        { name: "edit", text: "edit", template: "<a class='btn-small lnkEdit'><i class='fa fa-pencil-square-o grid-edit-link'></i></a>", width: 10 },
+                        { name: "destroy", text: "delete", template: "<a class='btn-small lnkDelete'><i class='fa fa-times grid-edit-link'></i></a>", width: 10 }
+                     ]
+                     , width: 120
+                     , title: "<button id='btnAdd' class='btn btn-primary'>Add Server</button>"
+                     , menu: false
+                 }               
+               , { field: "ServerName", title: "Server Name", width: "180px" }
+               , { field: "ServerAlias", title: "Server Alias", width: "160px" }
+               , { field: "ServerMachineName", title: "Server Machine Name", width: "208px", template: "#= trimText(ServerMachineName, 18) #"}
+               , { field: "ServerIP", title: "Server IP", width: "130px" }
+               , { field: "ClusterID", title: "Cluster", width: "145px", template: "#=fnTemplateData('dsClusters', ClusterID) #", filterable: { ui: clusterFilter } }
+               , { field: "ServerTypeID", title: "Server Type", width: "135px", template: "#=fnTemplateData('dsServerTypes', ServerTypeID) #", filterable: { ui: serverTypeFilter } }
+               , { field: "TimeZoneString", title: "Timezone", template: "#=trimText(TimeZoneString.substring(0,TimeZoneString.indexOf(';')), 21) #", width: "200px" }
+               , { field: "ExecutionTypeID", title: "Execution Type", width: "175px", template: "#=fnTemplateData('dsExecutionTypes', ExecutionTypeID) #", filterable: { ui: executionTypeFilter } }
+               //, { field: "TimeZoneString", title: "Timezone", template: "#=TimeZoneString.substring(0,21)+ '...'#", width: "200px" }
+               , { field: "IsActive", title: "Active?", template: '#=fnTemplateCheck(IsActive)#', width: "100px", filterable: {
+                        multi: true, checkAll: false, itemTemplate: function (ee) {
+                            return "<div><input type='checkbox' name='rb" + ee.field + "' value='#=data.IsActive#'/># if(data.IsActive) {# <i class='icon-ok'/> #}else{# <i class='icon-remove'/>#}#</div>";
+                        }
+                    }                    
+               }
+               //, { field: "CreatedDate", title: "Created", template: "#=kendo.toString(CreatedDate, 'G')#", width: "200px" }
+               , { field: "LastUpdated", title: "Last Updated", template: "#=kendo.toString(LastUpdated, 'G')#", width: "200px" }
+            ]
+            , editable: {
+                mode: "popup"
+                       , edit: true
+                       , destroy: true
+                       , create: true
+                       , confirmation: "Are you sure you want to delete this?"
+                       , template: $("#tplServers").html()
+            }
+            , dataBound: OnGridDataBind
+            , edit: function (evt)
+            {
+                var container = evt.container;
+                container.width("480").height("790");
+
+                var win = container.data("kendoWindow");                
+                //var title = (!evt.model.GUID) ? "Add New Server" : "Editing [" + evt.model.ServerName + "]";
+                var title = (evt.model.ServerName == "") ? "Add New Server" : "Editing [" + evt.model.ServerName + "]";
+                win.title(title);
+                win.center().open();
+
+                var isActiveChekbox = container.find("#IsActive");
+                var isNewServer = (evt.model.ServerName == "");
+                if (isNewServer) {
+                    isActiveChekbox.prop("checked", true);
+                    evt.model.IsActive = true;
+                } else {
+                    if (evt.model.IsActive) {
+                        isActiveChekbox.prop("checked", true);
+                    } else {
+                        isActiveChekbox.prop("checked", false);
+                    }
+                }
+
+                var ddlClusters = container.find("#ClusterID");
+                ddlClusters.kendoDropDownList({
+                    dataSource: dsClusters
+                    //, autoBind:false
+                    , dataTextField: "Name"
+                    , dataValueField: "ID"
+                    , optionLabel: "--Select a Cluster--"
+                });
+
+                var ddlServerType = container.find("#ServerTypeID");
+                ddlServerType.kendoDropDownList({
+                    dataSource: dsServerTypes
+                    //,autoBind:false
+                    , dataTextField: "Name"
+                    , dataValueField: "ID"
+                    , optionLabel: "--Select a Server Type--"
+                });
+
+                var ddlTimeZones = container.find("#TimeZoneString");
+                ddlTimeZones.kendoDropDownList({
+                    dataSource: dsTimeZones
+                    , dataTextField: "Text"
+                    , dataValueField: "Value"
+                    , optionLabel: "--Select a TimeZone--"
+                });
+
+                var ddlExecutionTypes = container.find("#ExecutionTypeID");
+                ddlExecutionTypes.kendoDropDownList({
+                    dataSource: dsExecutionTypes
+                    //,autoBind:false
+                    , dataTextField: "Name"
+                    , dataValueField: "ID"
+                    , optionLabel: "--Select an Execution Type--"
+                });
+
+                SetValidation(container);
+
+                evt.container.find(".k-grid-cancel").on("click", function (e)
+                {
+                    evt.sender.cancelChanges();
+                    evt.sender.dataSource.read();
+                });
+            }
+            , save: function (evt)
+            {            	
+                var container = evt.container;
+                var validator = container.find(".lyrEdit").data("kendoValidator");
+                if (!validator.validate())
+                    evt.preventDefault();
+
+                var isActive = container.find("#IsActive").prop("checked");
+                if (evt.model.IsActive != isActive) {
+                    evt.model.IsActive = isActive;
+                    evt.model.dirty = true;
+                }
+
+            }
+           , sortable: { mode: "multiple" }
+           , columnMenu: gridColumMenuOptions
+           , filterable: gridFilterOptions
+           , resizable: true
+           , pageable: true
+           , scrollable: true
+        }).data("kendoGrid")
+        .wrapper.height("600px");
+
+
+        $("#kGrid").kendoTooltip({
+            show: function (e) {
+                if (this.content.text() != null && this.content.text().length > 0) {
+                    this.content.parent().css("visibility", "visible");
+                }
+            },
+            hide: function (e) {
+                this.content.parent().css("visibility", "hidden");
+            },
+            filter: "td:nth-child(4)",
+            position: "bottom",
+            content: function (e) {
+                var dataItem = $("#kGrid").data("kendoGrid").dataItem(e.target.closest("tr"));
+                var content = dataItem.ServerMachineName;
+                return content;
+            }
+        }).data("kendoTooltip");
+
+        $("#kGrid").kendoTooltip({
+            show: function (e) {
+                if (this.content.text() != null && this.content.text().length > 0) {
+                    this.content.parent().css("visibility", "visible");
+                }
+            },
+            hide: function (e) {
+                this.content.parent().css("visibility", "hidden");
+            },
+            filter: "td:nth-child(8)",
+            position: "bottom",
+            content: function (e) {
+                var dataItem = $("#kGrid").data("kendoGrid").dataItem(e.target.closest("tr"));
+                var content = dataItem.TimeZoneString;
+                return content;
+            }
+        }).data("kendoTooltip");
+
+        function ServersDataSource()
+        {
+        	return new kendo.data.DataSource({
+        		type: "signalr",
+        		autoSync: false,        		
+                transport: {
+                	signalr: {
+                        promise: hubStart,
+						hub: serverHub,
+                		server: {
+                		    read: "readAsync"
+							, create: "create"
+							, destroy: "destroy"
+							, update: "update"
+                		},
+                		client: {
+                			read: "read"
+							, create: "create"
+							, destroy: "destroy"
+							, update: "update"
+                		}
+                	},
+                	parameterMap:function(option,type)
+                	{
+                		if (type === "create")
+                		{
+                			option.GUID = kendo.guid();
+                		}else if (type === "destroy")
+                		{
+                		    //option.SettingsFields = option.SettingsFields.split(",");
+                		    //option.SourceFileMetadataFields = option.SourceFileMetadataFields.split(",");
+                		    //option.CustomPropertiesFields = option.CustomPropertiesFields.split(",");
+
+                		}
+                		return option;
+                	}
+                }//end transport
+               , schema: {
+                   model: {
+                       id: "ServerID"
+                       , fields: {
+                            ServerID: { type: "number" }
+                           , ClusterID: { type: "number" }
+                           , IsActive: { type: "boolean" }
+                           , ServerAlias: { type: "string" }
+                           , ServerIP: { type: "string" }
+                           , ServerName: { type: "string" }
+                           , ServerMachineName: { type: "string" }
+                           , TimeZoneString: { type: "string" }
+                           , ServerTypeID: { type: "number" }
+                           , ExecutionTypeID: { type: "number" }
+                           //, CreatedDate: { type: "date", format: "MM/dd/yyyy" }
+                           , LastUpdated: { type: "date", format: "MM/dd/yyyy", parse: function (value) { return parseUTCDate(value) } }
+                       }
+                   }
+                   , total: function (data) { return data.length; }
+               }
+               , requestEnd: function (e) {
+                   kendo.ui.progress($(".k-grid"), false);
+               }
+               , requestStart: function (e) {
+                   kendo.ui.progress($(".k-grid:visible"), true);
+               }
+               , serverPaging: false
+               , serverSorting: false
+               , serverFiltering: false
+               , pageSize: 20
+            });//end dataSource
+        }//end DataSource()       
+
+        function SetValidation(container)
+        {
+            var validator = container.find(".lyrEdit").kendoValidator({
+                rules: {
+                    required: function (input)
+                    {
+                        if (input.is("[class*='required']"))
+                        {
+                            if (!$.trim(input.val()))
+                                return false;
+                            return true;
+                        }
+                        return true;
+                    }
+                }//end rules
+                , messages: {
+                    required: "* required"
+                }
+                , validateOnBlur: false
+            });
+        }
+
+        function clusterFilter(ele) {
+            ele.kendoDropDownList({
+                dataSource: dsClusters
+               , dataTextField: "Name"
+               , dataValueField: "ID"
+               , optionLabel: "--Select--"
+            }).data("kendoDropDownList").wrapper.width("250px");
+        }
+        
+        function serverTypeFilter(ele) {
+            ele.kendoDropDownList({
+                dataSource: dsServerTypes
+               , dataTextField: "Name"
+               , dataValueField: "ID"
+               , optionLabel: "--Select--"
+            }).data("kendoDropDownList").wrapper.width("250px");
+        }
+
+        function executionTypeFilter(ele) {
+            ele.kendoDropDownList({
+                dataSource: dsExecutionTypes
+               , dataTextField: "Name"
+               , dataValueField: "ID"
+               , optionLabel: "--Select--"
+            }).data("kendoDropDownList").wrapper.width("250px");
+        }
+
+        fnTemplateData = function (dsName, idField) {
+            var ds = eval(dsName);
+            var htm = tplData({ DataSource: ds.data(), ID: idField });
+            return htm;
+        }
+
+        fnTemplateCheck = function (value) {
+            //var isChecked = (value == 0); 
+            var htm = tplcheck({
+                Val: value //isChecked 
+            });
+            return htm;
+        }
+
+    });
+
+</script>
+<script id="tplServers" type="text/x-kendo-template">
+    <div id='lyrEdit' class="lyrEdit">
+
+        <div class="control-group">
+            <label for="ServerName" class="control-label">Server Name</label>
+            <div class="controls"><input type="text" id="ServerName" style="width: 400px; height: 34px" class="required form-control" name="ServerName" data-bind="value: ServerName" /></div>
+        </div>
+
+        <div class="control-group">
+            <label for="ServerAlias" class="control-label">Server Alias</label>
+            <div class="controls"><input type="text" id="ServerAlias" style="width: 400px; height: 34px" class="required form-control" name="ServerAlias" data-bind="value: ServerAlias" /></div>
+        </div>
+
+        <div class="control-group">
+            <label for="ServerMachineName" class="control-label">Server Machine Name</label>
+            <div class="controls"><input type="text" id="ServerMachineName" style="width: 400px; height: 34px" class="required form-control" name="ServerMachineName" data-bind="value: ServerMachineName" /></div>
+        </div>
+
+        <div class="control-group">
+            <label for="ServerIP" class="control-label">Server IP</label>
+            <div class="controls"><input type="text" id="ServerIP" style="width: 400px; height: 34px" class="required form-control" name="ServerIP" data-bind="value: ServerIP" /></div>
+        </div>
+
+        <div class="control-group">
+            <label for="ClusterID" class="control-label">Cluster</label>
+            <div class="controls"><input id="ClusterID" style="width:430px" class="required" name="ClusterID" data-bind="value: ClusterID" /></div>
+        </div>
+
+        <div class="control-group">
+            <label for="ServerTypeID" class="control-label">Server Type</label>
+            <div class="controls"><input id="ServerTypeID" style="width: 430px" class="required" name="ServerTypeID" data-bind="value: ServerTypeID" /></div>
+        </div>
+        <div class="control-group">
+            <label for="TimeZoneString" class="control-label">Timezone</label>
+            <div class="controls"><input id="TimeZoneString" style="width: 430px" class="required" name="TimeZoneString" data-bind="value: TimeZoneString" /></div>
+        </div>
+
+        <div class="control-group">
+            <label for="ExecutionTypeID" class="control-label">Execution Type</label>
+            <div class="controls"><input id="ExecutionTypeID" style="width:430px" class="required" name="ExecutionTypeID" data-bind="value: ExecutionTypeID" /></div>
+        </div>
+
+        <div class="control-group">
+            <label for="IsActive" class="control-label">Active?</label>
+            <div class="controls"><input type="checkbox" id="IsActive" style="width:20px;text-align:left" name="IsActive" data-bind="checked: IsActive" /></div>
+            @*<div class="controls"><input type="checkbox" id="IsActive" style="width:20px;text-align:left" name="IsActive" data-bind="value: IsActive" data-role="checkbox" tabindex="9" /></div>*@
+        </div>
+    </div>
+</script>
+
+@*<script id="tplCheck" type="text/x-kendo-template">
+    #
+    var iconClass = "icon-ok";
+    if(!Val) {
+    iconClass = "icon-remove";
+    }
+    #
+    <div style='text-align:center'><i class="#=iconClass#">&nbsp;</i></div>
+</script>*@   
+<script>
+    function trimText(txt, len) {
+        if (!txt)
+            return '';
+        if (txt.length > len)
+            return txt.substring(0, len) + '...';
+        else
+            return txt;
+    }
+</script>
+<script id="tplCheck" type="text/x-kendo-template">
+    #
+    var iconClass = "glyphicon glyphicon-ok green";
+    if(!Val) {
+    iconClass = "glyphicon glyphicon-remove red";
+    }
+    #
+    <div style='text-align:center'><i class="#=iconClass#">&nbsp;</i></div>
+</script>
+
+<script id="tplDataDisplayName" type="text/x-kendo-template">
+    <div>
+        # var obj = $.grep(DataSource, function(ele,id){return ele.ID == ID});
+        if(obj.length == 1){
+        #
+        #=obj[0].Name#
+        #}#
+    </div>
+</script>

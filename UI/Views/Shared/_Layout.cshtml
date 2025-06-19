@@ -1,0 +1,93 @@
+﻿@{
+    //var routeData = Context.Request.RequestContext.RouteData.Values;
+    //var controller = routeData["controller"].ToString();
+
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>@ViewBag.Title - Publicis Media Data Lake</title>
+    <link rel="stylesheet" href="~/Content/css">
+    <link rel="stylesheet" href="~/Content/kendo/css">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"></link>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:400,100,300,500,700,900|RobotoDraft:400,100,300,500,700,900"></link>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open Sans:400,100,300,500,700,900|Lato:400,100,300,500,700,900"></link>
+    <link href="https://fonts.googleapis.com/css?family=Orbitron" rel="stylesheet" type="text/css"></link>
+    <script type="text/javascript" src="~/bundles/jquery"></script>
+    <script type="text/javascript" src="~/bundles/jqueryval"></script>
+    <script src="~/bundles/unobtrusive"></script>
+    <script src="~/bundles/modernizr"></script>
+    <script src="~/bundles/bootstrap"></script>
+    <script src="~/bundles/kendo"></script>
+    <script src="~/bundles/libs"></script>
+    <script src="~/bundles/signalr"></script>
+
+
+    <script type="text/javascript">
+        $(document).ready(function () {
+            var defaults = {
+                containerID: 'toTop', // fading element id
+                containerHoverID: 'toTopHover', // fading element hover id
+                scrollSpeed: 1200,
+                easingType: 'linear'
+            };
+            $().UItoTop({ easingType: 'easeOutQuart' });
+        });
+    </script>
+
+    @if (User.Identity.IsAuthenticated)
+    {
+        <script>
+            var userAuthorized = true;
+            var menuData;
+        </script>
+    }
+    else
+    {
+        <script>
+            var userAuthorized = false;
+            var menuData = null;
+        </script>
+    }
+
+</head>
+<body data-page-scope="@ViewBag.PageScope">
+    <!-- start header -->
+    <div class="header_bg">
+        <div class="wrap">
+            <div id="content">
+                <header id="topnav">
+                    @{
+                        //Html.Action("_Header", "Account", new { area = "" });
+                        @await Component.InvokeAsync("_Header")
+                        //<partial name="_Header" model="@Menu" />
+                    }
+                </header>
+            </div>
+        </div>
+    </div>
+    <div class="clear"> </div>
+    <div class="container body-content">
+        @RenderSection("SupportSection", false)
+        @RenderBody()
+        @RenderSection("Scripts", false)
+    </div>
+
+    <br />
+    <br />
+    <footer>
+        <div class="footer" id="footer" style="height:65px">
+            @*<div class="wrap">
+            <h2></h2>*@
+            <div class="copy">
+                @*<p>Publicis Media Data Lake Administration @HttpContext.Current.Application["Version"]<br />&copy; @DateTime.Now.Year Publicis Media. All Rights Reserved</p>*@
+                <p>Publicis Media Data Lake Administration <br />&copy; @DateTime.Now.Year Publicis Media. All Rights Reserved</p>
+            </div>
+            @*</div>*@
+        </div>
+        <a href="#" id="toTop" style="display: block; z-index: 10000"><span id="toTopHover" style="opacity: 1;"></span></a>
+    </footer>
+</body>
+</html>

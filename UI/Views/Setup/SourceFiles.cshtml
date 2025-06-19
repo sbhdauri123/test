@@ -1,0 +1,417 @@
+﻿@{
+    ViewBag.Title = "Source Files";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<style>
+    .container {
+        width: 100%;
+    }
+
+    hr {
+        width: 100%;
+        height: 1px;
+        margin-top: 1px;
+        margin-bottom: 1px;
+        background: #fff
+    }
+</style>
+
+<div class="dragoMain" id="userTableContainer">
+    <div id="gridContainer" class="toolControlContainer tc-Main">
+        <header>
+            <h2>Source File Setup</h2>            
+            <div id="ddlSources"></div>
+        </header>
+        <div id="kGrid" class="toolControl">
+        </div>
+    </div>
+</div>
+
+@section scripts
+{
+<script src="~/Scripts/Greenhouse/common.js"></script>
+<script type="text/javascript">
+    var dsMetaData = {};
+
+    $(function ()
+    {
+        var lyrGrid = $("#kGrid");
+
+        var url = "/sourceFileHub";
+
+        var sourceFileHub = new signalR.HubConnectionBuilder()
+        .withUrl(url, {
+            transport: signalR.HttpTransportType.LongPolling
+        })
+        .build();
+
+        var ddlSources = $("header").find("#ddlSources").kendoDropDownList({
+            dataSource: GetDataSource("GetGreenhouseSources", "SourceID", "SourceName")
+            , dataTextField: "Name"
+            , dataValueField: "ID"
+            , optionLabel: "--Select Source--"
+            , change: function ()
+            {
+                var val = this.value();
+                var btnAdd = kg.thead.find("#btnAdd");
+                if (val)
+                {
+                    kg.thead.show();
+                    kg.dataSource.read({ data: val });
+                }
+                else
+                {
+                    kg.thead.hide();
+                    kg.dataSource.data([]);
+                }
+            }
+        }).data("kendoDropDownList");
+
+        var kg = lyrGrid.kendoGrid({
+            dataSource: SourceFileDataSource()
+            , autoBind:false
+            , columns: [
+                 {
+                     command: [{ name: "edit", text: "", template: "<a class='btn-small lnkEdit'><i class='fa fa-pencil-square-o grid-edit-link'></i></a>", width: 10 }
+                     , { name: "destroy", template: "<a class='btn-small lnkDelete'><i class='fa fa-times grid-edit-link'></i></a>", text: "", width: 10 }], width: "135px"
+                         , title: "<button id='btnAdd' class='btn btn-primary'>Add Source File</button>", menu:false
+                 }
+               , { hidden: true, field: "SourceFileID"}
+               , { field: "SourceFileName", title: "File Name", width: "200px" }
+               , { field: "RegexMask", title: "Source File Regex", width: "380px", template: "#=trimText(RegexMask, 40)#" }
+               , { hidden: true, field: "SourceID"}
+               , {
+                   field: "IsActive", title: "Active?", width: "100px", template: '#=fnTemplateCheck(IsActive)#',
+                   filterable: {
+                       multi: true,
+                       checkAll: false,
+                       itemTemplate: function (ee) {
+                           return "<div><input type='checkbox' name='rb" + ee.field + "' value='#=data.IsActive#'/># if(data.IsActive) {# <i class='glyphicon glyphicon-ok green'/> #}else{# <i class='glyphicon glyphicon-remove red'/>#}#</div>";
+                       }
+                   }
+               }
+               , { field: "LastUpdated", title: "Last Updated", template: "#=kendo.toString(LastUpdated, 'G')#", width: "200px" }
+            ]
+            , editable: {
+                mode: "popup"
+                       , edit: true
+                       , destroy: true
+                       , create: true
+                       , confirmation: "Are you sure you want to delete this?"
+                       , template: $("#tplSourceFiles").html()
+            }
+            , dataBound: OnGridDataBind
+            , edit: function (evt)
+            {
+                var container = evt.container;
+                container.width("490").height("340");
+                var isNewSource = (evt.model.SourceID == "");
+                var win = container.data("kendoWindow");
+                win.center();
+                var title = (isNewSource) ? "Add New Source File" : "Editing Source File [" + evt.model.SourceFileName + "]";
+                win.title(title);
+
+                evt.model.SourceID = ddlSources.value();
+
+                var isActive = container.find("#IsActive");
+
+                if (isNewSource) {
+                    isActive.prop("checked", true);
+                    evt.model.IsActive = true;
+                } else {
+                    if (evt.model.IsActive) {
+                        isActive.prop("checked", true);
+                    } else {
+                        isActive.prop("checked", false);
+                    }
+                }
+
+                SetValidation(container);
+            }
+            , save: function (evt)
+            {
+                var container =  evt.container;
+                var validator = container.find(".lyrEdit").data("kendoValidator");
+                if (!validator.validate())
+                    evt.preventDefault();
+
+                var isActive = container.find("#IsActive").prop("checked");
+                if (evt.model.IsActive != isActive) {
+                    evt.model.IsActive = isActive;
+                    evt.model.dirty = true;
+                }
+            }
+           , sortable: { mode: "multiple" }
+           , columnMenu: gridColumMenuOptions
+           , filterable: gridFilterOptions
+           , resizable: true
+           , pageable: true
+           , scrollable: true
+        }).data("kendoGrid");
+        kg.wrapper.height("570px");
+        kg.thead.hide();//hide grids columns on initial load
+
+        lyrGrid.kendoTooltip({
+            show: function (e) {
+                if (this.content.text() != null && this.content.text().length > 0) {
+                    this.content.parent().css("visibility", "visible");
+                }
+            },
+            hide: function (e) {
+                this.content.parent().css("visibility", "hidden");
+            },
+            filter: "td:nth-child(4)",
+            position: "bottom",
+            content: function (e) {
+                var dataItem = $("#kGrid").data("kendoGrid").dataItem(e.target.closest("tr"));
+                var content = dataItem.RegexMask;
+                return content;
+            }
+        }).data("kendoTooltip");
+
+        function SourceFileDataSource() {
+            return new kendo.data.DataSource({
+                type: "signalr",
+                autoSync: false,
+                transport: {
+                    signalr: {
+                            promise: sourceFileHub.start(),
+                        hub: sourceFileHub,
+                        server: {
+                            read: "readAll"
+							, create: "create"
+							, destroy: "destroy"
+							, update: "update"
+                        },
+                        client: {
+                            read: "readAll"
+							, create: "create"
+							, destroy: "destroy"
+							, update: "update"
+                        }
+                    }
+
+                    , parameterMap: function (option, type)
+                    {
+                        if (type != "read") {
+                            if (type == "create")
+                            {
+                                //option.GUID = kendo.guid();
+                            }
+                        }
+                        else {
+                            option = option.data.toString(); //data set by source dropdown, and controller expecting param strings[]
+                        }
+
+                        return option;
+                    }
+                }
+               , schema: {
+                   model: {
+                       id: "SourceFileID",
+                       fields: {
+                                SourceFileID: { type: "number" }
+                          , SourceFileName: {
+                              type: "string",
+                              validation: {
+                                  required: true
+                              }
+                          }
+                          , RegexMask: {
+                              type: "string",
+                              validation: {
+                                  required: true,
+                                  regexmaskvalidation: function (input) {
+                                      if (input.is("[name='RegexMask']") && input.val() != "") {
+                                          input.attr("data-regexmaskvalidation-msg", "Spaces are not allowed.");
+                                          return /^\S+$/.test(input.val());
+                                      }
+
+                                      return true;
+                                  }
+                              }
+                          }
+                          , SourceID: { type: "number" }
+                          , IsActive: { type: "boolean" }
+                          , LastUpdated: { type: "date", format: "MM/dd/yyyy", parse: function (value) { return parseUTCDate(value) } }
+                       }
+                   }
+
+                   , parse: function (data)
+                   {
+                       if (type(data) === "array")
+                       {
+                           $.each(data, function (index, ele)
+                           {
+                               ele.Metadata = ele.Metadata || {};
+                           });
+                       } else
+                       {
+                           data.Metadata = data.Metadata || {};
+                       }
+                       return data;
+                   }
+
+                   , total: function (data) { return data.length; }
+               }
+               , requestEnd: function (e) {
+                   kendo.ui.progress($(".k-grid"), false);
+               }
+               , requestStart: function (e) {
+                   kendo.ui.progress($(".k-grid:visible"), true);
+               }
+               , serverPaging: false
+               , serverSorting: false
+               , serverFiltering: false
+               , pageSize: 15
+                , error: function (e) {
+                    if (e.xhr.toString().indexOf("Error: The DELETE") != -1) {
+                        //http://www.telerik.com/forums/rows-disappeared-from-grid-on-delete-fail
+                        $("#kGrid").data("kendoGrid").cancelChanges();
+                        alert("This record can not be deleted because there are associated elements. Please delete all associated elements first.");
+                    }
+                }
+            });//end dataSource
+        }//end DataSource()
+
+        
+        function SetValidation(container) {
+            var validator = container.find(".lyrEdit").kendoValidator({
+                rules: {
+                    customRequired: function (input) {
+                        if (input.is("[class*='required']") || input.is("[data-role='dropdownlist']"))
+                        {
+                            if (input.is("[type='checkbox']") && input.is("[class*='required']"))
+                            {
+                                return input.is(":checked");
+                            }
+                            else if (!$.trim(input.val()))
+                            {
+                                return false;
+                            }
+                            return true;
+                        }
+                        return true;
+                    }
+                }//end rules
+                , messages: {
+                    customRequired: "* required"
+
+                }
+                , validateOnBlur: false
+            });
+        }
+
+        var tplcheck = kendo.template($("#tplCheck").html());
+
+        fnTemplateCheck = function (value) {
+            var htm = tplcheck({
+                Val: value
+            });
+            return htm;
+        }
+
+    });
+
+
+    function escapeJavascript(input) {
+        var escape = "";
+
+        var i = 0;
+        for (i = 0; i < input.length; i++) {
+            escape = escape + javascriptEscapeCode(input.charAt(i), false);
+        }
+
+        return escape;
+    }
+
+    function javascriptEscapeCode(original) {
+        var thecharchar = original.charAt(0);
+        switch (thecharchar) {
+            case '\r': return "\\r"; break;
+            case '\n': return "\\n"; break; //newline
+            case '\v': return "\\v"; break;
+            case '\'': return "\\'"; break;
+            case '"': return "\\\""; break;
+            case '\&': return "\\&"; break;
+            case '\\': return "\\\\"; break;
+            case '\t': return "\\t"; break;
+            case '\b': return "\\b"; break;
+            case '\f': return "\\f"; break;
+            default:
+                return original;
+                break;
+        }
+    }
+</script>
+}
+
+<script type="text/html" id="tableTemplate">
+    <div class="table-responsive">
+        <table class="table table-bordered">
+            <tbody>
+                **BODY**
+            </tbody>
+        </table>
+    </div>
+</script>
+
+
+
+<script id="tplSourceFiles" type="text/html">
+<div id='lyrEditSourceFiles' class="lyrEdit">
+    <div class="control-group">                            
+        <label for="SourceFileName" class="control-label">Source File Name:</label>
+        <div class="controls"><input type="text" class="required form-control" required id="SourceFileName" style="width:420px; height: 34px" name="SourceFileName" data-bind="value: SourceFileName" /></div>                                
+    </div>
+    <div class="control-group">                            
+        <label for="RegexMask" class="control-label">Source File Regex:</label>
+        <div class="controls"><textarea class="required form-control" id="RegexMask" style="width: 420px; height: 44px" name="RegexMask" data-bind="value: RegexMask" /></div>                                
+    </div>
+    <div class="control-group">                            
+        <label for="IsActive" class="control-label">Active:</label>
+        <div class="controls"><input type="checkbox" id="IsActive" style="width:20px;text-align:left" name="IsActive" data-bind="checked: IsActive"/></div>                                
+    </div>
+</div>
+</script>
+
+<script id="tplCheck" type="text/x-kendo-template">
+	#
+	var iconClass = "glyphicon glyphicon-ok green";
+	if(!Val) {
+	iconClass = "glyphicon glyphicon-remove red";
+	}
+	#
+	<div style='text-align:center'><i class="#=iconClass#">&nbsp;</i></div>
+</script>  
+
+
+
+<script type="text/x-kendo-template" id="popOverPanelHTML">
+	<div class="k-block"><div class="k-header k-shadow">#=data.Title#</div>#=data.Text#</div>
+</script>
+
+<script id="tplDataDisplayName" type="text/x-kendo-template">
+    <div>
+        # var obj = $.grep(DataSource, function(ele, id) {
+            return ele.ID == ID
+        });
+
+        if(obj.length == 1) {
+        #
+        #=obj[0].Name#
+        #}#
+    </div>
+</script>
+
+<script>
+    function trimText(txt, len) {
+        if (!txt)
+            return '';
+        if (txt.length > len)
+            return txt.substring(0, len) + '...';
+        else
+            return txt;
+    }
+</script>

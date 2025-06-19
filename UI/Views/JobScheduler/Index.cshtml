@@ -1,0 +1,212 @@
+﻿
+@{
+	ViewBag.Title = "Job Scheduler";
+	Layout = "~/Views/Shared/_Layout.cshtml";
+	var jobCategories = ViewBag.JobCategories;
+	var jobTypes = ViewBag.JobTypes;
+	var schedulerConfiguration = ViewBag.SchedulerConfiguration;
+	var intervals = ViewBag.Intervals;
+
+	var objJobType = ViewData["SchedulerConfiguration"];
+	var schedulerConfigByJobType = ViewBag.SchedulerConfigByJobType as Dictionary<string, List<Greenhouse.Data.Model.Setup.SchedulerConfiguration>>;
+	string schedulerConfigByJobTypeJson = Newtonsoft.Json.JsonConvert.SerializeObject(schedulerConfigByJobType);
+
+}
+
+
+<link rel="stylesheet" href="https://kendo.cdn.telerik.com/2017.3.1026/styles/kendo.default.min.css" />
+<link rel="stylesheet" href="https://kendo.cdn.telerik.com/2017.3.1026/styles/kendo.common.min.css" />
+<script src="https://kendo.cdn.telerik.com/2017.3.1026/js/kendo.all.min.js"></script>
+
+<div class="greenhouseMain" id="userTableContainer">
+	<div id="gridContainer" class="toolControlContainer tc-Main">
+		<header>
+			<h2>Job Scheduler</h2>
+		</header>
+		<div id="kGrid" class="toolControl">
+		</div>
+	</div>
+</div>
+
+<div id="dialog"></div>
+
+<script src="~/Scripts/greenhouse/common.js"></script>
+<script type="text/javascript">
+var schedulerConfig = @Html.Raw(schedulerConfigByJobTypeJson);
+var intervals = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(intervals));
+var jobTypes = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(jobTypes));
+</script>
+
+<script type="text/javascript" src="/Scripts/jobController/page.js"></script>
+
+
+
+<script type="text/x-kendo-template" id="template">
+	#if(data.isNew()) {#
+	#var createTemp = kendo.template($("\#createTemplate").html());#
+	#=createTemp(data)#
+	#} else {#
+	#var editTemp = kendo.template($("\#editTemplate").html());#
+	#=editTemp(data)#
+	#}#
+</script>
+
+
+
+<script type="text/x-kendo-template" id="createTemplate">
+	<div id='lyrEditSourceFiles' class="form-horizontal lyrEdit">
+		<style type="text/css">
+			label {
+				display: inline;
+				text-indent: -5px;
+			}
+
+			input {
+				padding: 0;
+				margin: 0;
+				vertical-align: bottom;
+				position: relative;
+				top: -1px;
+				*overflow: hidden;
+			}
+
+			.k-edit-form-container {
+				width: 500px !important;
+			}
+		</style>
+
+		@*<div id="selectedScheduler"><p style="font-weight:bold;"></p></div>*@
+		@*<br />*@
+		<div id="jobTypeTabs" class="control-group">
+			<ul id="jobTabs" class="nav nav-tabs" role="tablist">
+				@{
+					int k = 1;
+					foreach (var jobType in jobTypes)
+					{
+						<li role="presentation" class="dropdown @(k==1? "active": "")">
+							<a href="\\#" id="@String.Format("tabDropdown{0}",k)" class="dropdown-toggle jobType" data-toggle="dropdown" data-id=@jobType.ID data-stepid="@jobType.DefaultSourceJobStepId" aria-controls="@String.Format("tabDropdown{0}-contents",k)" aria-expanded="false">
+								@jobType.Name
+							</a>
+						</li>
+						k++;
+					}
+				}
+			</ul>
+			<input type="hidden" id="selectedSourceJobStepID" />
+			@*<input type="hidden" id="selectedSourceJobName" />*@
+		</div>
+
+		#= renderDetailsTemplate(data) #
+	</div>
+</script>
+
+
+<script type="text/x-kendo-template" id="editTemplate">
+	<div class="control-group">
+		<label for="Description" class="control-label">Job Type:</label>
+		<div class="controls"><input type="text" class="required form-control" id="Description" style="width:375px; height: 34px" name="Description" data-bind="value: Description" /></div>
+	</div>
+	<div class="control-group">
+		<label for="JobGroup" class="control-label">Source:</label>
+		<div class="controls"><input type="text" id="JobGroup" style="width: 375px; height:34px" class="form-control" name="JobGroup" data-bind="value: JobGroup" /></div>
+	</div>
+	<div class="control-group lyrEdit" id="timesection">
+		<label for="TimeEdit" class="control-label">Next Fire Time:</label>
+		<div class="controls">
+			<input class="required" id="TimeEdit" style="width:250px" name="TimeEdit" />
+		</div>
+	</div>
+</script>
+
+
+<script id="tplJobSchedule-Details" type="text/html">
+	<div class="control-group" id="jobSection">
+		<label for="GreenhouseJob" class="control-label">Greenhouse Job:</label>
+		<div class="controls"><input id="GreenhouseJob" style="width:250px" name="GreenhouseJob" /></div>
+	</div>
+
+	<div class="control-group" id="sourceSection">
+		<label for="greenhouseSourceId" class="control-label">Source:</label>
+		<div class="controls"><input id="greenhouseSourceId" style="width:250px" name="greenhouseSourceId" data-bind="value: greenhouseSourceId" /></div>
+	</div>
+
+	<div class="control-group" id="timesection">
+		<label for="Time" class="control-label">Time:</label>
+		<div class="controls">
+			<input class="required" id="Time" style="width:250px" name="Time" />
+		</div>
+	</div>
+	<br />
+
+	<div class="hide" id="jobschedulertypesection">
+        <div>
+            <label for="" class="control-label">Job Type:</label>
+            <div class="controls">
+                <input type="radio" checked="checked" name="JobSchedulerType" class="form-control-small inline noshadow" id="Recurring" placeholder="minutes" style="width:50px" /><label for="Recurring">Recurring</label>
+                <input type="radio" name="JobSchedulerType" class="form-control-small inline noshadow" id="Backfill" placeholder="minutes" style="width:50px" /><label for="Backfill">Backfill</label>
+            </div>
+            <br />
+            <div class="hide" id="jobschedulertypebackfilldatesection">
+                <div class="hide" id="backfillDimensionOnlySection">
+                    <input type="checkbox" name="BackfillDimensionOnly" class="form-control-small inline noshadow" id="BackfillDimensionOnly" style="width:50px" /><label for="BackfillDimensionOnly">Backfill Dimension Data Only</label>
+                </div>
+				<br />
+                <div class="onaline dates" id="backfillDatesSection">
+                    <label for="JobSchedulerTypeBackfillDateFrom" class="control-label">From:</label>
+                    <div class="controls">
+                        <input type="date" class="required" id="JobSchedulerTypeBackfillDateFrom" name="JobSchedulerTypeBackfillDateFrom" style="width:250px" />
+                    </div>
+                    <label for="JobSchedulerTypeBackfillDateTo" class="control-label">To:</label>
+                    <div class="controls">
+                        <input type="date" class="required" id="JobSchedulerTypeBackfillDateTo" name="JobSchedulerTypeBackfillDateTo" style="width:250px" />
+                    </div>
+                </div>
+                <br />
+                <div class="control-group">
+                    <label for="ApiEntities" class="control-label">API Entities:</label>
+                    <select id="ApiEntities" name="ApiEntity" class="required" multiple="multiple" data-placeholder="Select API Entities..." datepicker></select>
+                </div>
+            </div>
+
+        </div>
+
+		
+	</div>
+	<div id="IntervalSection">
+		<label for="Interval" class="control-label">Interval:</label>
+		<div class="controls">
+			<input id="Interval" name="Interval" style="width:250px" class="required form-control" />
+			<br /><br />
+		</div>
+		<div class="hide controls" id="daysection">
+			<label class="control-label">Every:</label><br />
+			<input type="checkbox" value="MON" /> Mon
+			<input type="checkbox" value="TUE" /> Tue
+			<input type="checkbox" value="WED" /> Wed
+			<input type="checkbox" value="THU" /> Thu
+			<input type="checkbox" value="FRI" /> Fri
+			<input type="checkbox" value="SAT" /> Sat
+			<input type="checkbox" value="SUN" /> Sun
+			<br /><br />
+		</div>
+
+		<div class="hide" id="hoursection">
+			<label for="txtHours" class="control-label">Every:</label>
+			<div class="controls">
+				<input type="text" id="txtHours" class="form-control" name=" txthours" placeholder="hours" style="width:50px" data-bind="value: Hours" />
+			</div>
+			<br /><br />
+		</div>
+		<div class="hide" id="minutesection">
+			<label for="txtMinutes" class="control-label">Every:</label>
+			<div class="controls">
+				<input type="text" id="txtMinutes" class="form-control" name="txtMinutes" placeholder="minutes" style="width:50px" data-bind="value: Minutes" />
+			</div>
+			<br /><br />
+		</div>
+	</div>
+
+
+	<div id="stallion-message" style="display:none" class="stallion-error"><span class="glyphicon glyphicon-info-sign"></span><span id="messageText"></span></div>
+</script>
+

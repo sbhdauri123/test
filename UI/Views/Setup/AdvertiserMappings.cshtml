@@ -1,0 +1,111 @@
+﻿﻿@{
+    ViewBag.Title = "Advertiser Mapping";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+@model List<Greenhouse.Data.Model.Setup.AdvertiserMapping>
+@{
+    ViewBag.PageScope = "AdvertiserMapping";
+    List<Greenhouse.Data.Model.Setup.DataSource> DataSource = (List<Greenhouse.Data.Model.Setup.DataSource>)ViewBag.DataSource;
+    List<Greenhouse.Data.Model.Setup.Instance> Instance = (List<Greenhouse.Data.Model.Setup.Instance>)ViewBag.Instance;
+
+}<div id="mainBody">
+<div class="dragoMain" id="userTableContainer" >
+    <div id="gridContainer" class="toolControlContainer tc-Main">
+        <header>
+            <h2>Advertiser Permissions</h2>
+        </header>
+        <br />
+
+        <div class="container-fluid" style="border:solid 1px gainsboro; padding:10px; height:590px;">
+            <div class="row">
+
+
+                <div class="col-sm-3 col-md-3 col-lg-3" style="width:20%;">
+                    <h4>SELECT DATA SOURCE & INSTANCE</h4>
+                    <div class="source-section k-header">
+                        <p>
+                            <label for="datasource">Data Source:</label><input id="datasource" style="width:85%" />
+                        </p>
+                        <p>
+                            <label for="instance">Instance:</label><input id="instance" @*disabled="disabled"*@ style="width:85%" />
+                        </p>
+                        <p>
+                            <label for="isAggregateFlag">Aggregate Sources:</label><input type="checkbox" id="isAggregateFlag" checked="checked"/>
+                        </p>
+                    </div>
+                    <br /><br /><br /><br />
+                    @*<input type="submit" name="submit" value="Submit" class="btn btn-primary" style="width: 5em;" />*@
+                </div>
+
+                <div class="col-sm-3 col-md-3 col-lg-3" style="width:35%;">
+                    <h4>AVAILABLE:</h4>
+                    <div class="stallion-multi-select">
+                        <div id="gridAvailable" ></div>
+                    </div>
+                </div>
+
+                <div class="col-sm-2 col-md-2 col-lg-2" style="width:100px; line-height:450px; vertical-align: middle">
+                    @*<a id="addToTrackedList" class="btn-small  add-list">
+                            Add to Tracked List <i class="icon-arrow-right">
+                            </i>
+                        </a>*@
+
+                    <a id="addToTrackedList" class='btn btn-primary'>
+                        Map <i class='fa fa-arrow-right'></i>
+                    </a>
+                </div>
+
+                <div class="col-sm-3 col-md-3 col-lg-3" style="width:35%;">
+                    <h4>MAPPED:</h4>
+                    <div class="stallion-multi-select">
+                        <div id="grid" class="toolControl">
+                            <div id="gridMapped"></div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="row" align="right" style="line-height:100px; padding-right:100px">
+                <a id="saveMapped" class='btn btn-primary'>
+                    Save Mapped Advertiser(s)
+                </a>
+            </div>
+        </div>
+        <div id="stallion-message" style="display:none" class="stallion-error"><span class="glyphicon glyphicon-info-sign"></span> <span id="messageText"></span></div>
+        <div id="stallion-confirmation" style="display:none" class="alert alert-success">The mappings have been successfully saved.</div>
+    </div>
+</div>
+ </div>
+    <script src="~/Scripts/Greenhouse/common.js"></script>
+    <script type="text/javascript">
+    var dsDataSource = @Html.Raw(Json.Serialize(DataSource));
+    var datasourceDS = new kendo.data.DataSource({ data: dsDataSource });
+    datasourceDS.read();
+
+    var dsInstance = @Html.Raw(Json.Serialize(Instance));
+    var instanceDS = new kendo.data.DataSource({ data: dsInstance });
+    instanceDS.read();
+
+    </script>
+
+    <script id="rowTemplate" type="text/x-kendo-tmpl">
+        <tr data-uid='#: uid #'>
+            <td>
+                <input type='checkbox' class='checkbox' />
+            </td>
+            <td>
+                #: AdvertiserNameDisplay #
+            </td>
+        </tr>
+    </script>
+
+    <script id="rowTemplateFree" type="text/x-kendo-tmpl">
+        <tr data-uid='#: uid #'>
+            <td><input type='text' id="txtAdvertiserId" value='#= AdvertiserId #' /> </td>
+            <td><input type='text' id="txtAdvertiserName" value='#= AdvertiserNameDisplay #' /> </td>
+        </tr>
+    </script>
+
+    <script src="~/Scripts/Greenhouse/AdvertiserMapping.js"></script>

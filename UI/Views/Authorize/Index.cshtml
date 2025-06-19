@@ -1,0 +1,54 @@
+﻿
+@{
+    ViewBag.Title = "User Authorization";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+
+<style>
+    .container {
+        width: 100%;
+    }
+</style>
+
+
+<div class="dragoMain" id="userTableContainer">
+    <div id="gridContainer" class="toolControlContainer tc-Main">
+        <header>
+            <h2>User Authorization Setup</h2>
+        </header>
+        <div id="kGrid" class="toolControl">
+        </div>
+    </div>
+</div>
+
+<script id="tplAuthorization" type="text/x-kendo-template">
+    <div id='lyrEditAuthorization' class="lyrEdit">
+        <div class="control-group">
+            <label for="Email" class="control-label">E-Mail:</label>
+            <div class="controls"><input type="email" id="Email" style="width: 400px; height:34px" class="required form-control" name="Email" data-bind="value: Email" placeholder="Enter a valid email address" /></div>
+        </div>
+    
+    <div class="control-group">
+        <label for="SAMAccountName" class="control-label">Lion Login</label>
+        <div class="controls"><input type="text" id="SAMAccountName" style="width: 400px; height:34px"  class="required unique form-control" name="Lion Login" placeholder="Enter a Lion Login" data-bind="value: SAMAccountName" /></div>
+    </div>
+    <div class="control-group">
+        <label for="IsAdmin" class="control-label" style="width:200px;">Is Admin: </label>
+        <div class="controls"><input type="checkbox" id="IsAdmin" name="IsAdmin" data-bind="checked: IsAdmin" /></div>
+    </div>
+    </div>
+</script>
+
+<script id="tplCheck" type="text/x-kendo-template">
+    #
+    var iconClass = "glyphicon glyphicon-ok green";
+    if(!Val) {
+    iconClass = "glyphicon glyphicon-remove red";
+    }
+    #
+    <div style='text-align:center'><i class="#=iconClass#">&nbsp;</i></div>
+</script>
+
+<script src="~/Scripts/Greenhouse/common.js"></script>
+<script src="~/Scripts/Greenhouse/authorize/authorization.js"></script>

@@ -1,0 +1,260 @@
+﻿@model Greenhouse.UI.Models.Menu
+@{
+    //var routeData = Context.Request.RequestContext.RouteData.Values;
+    var showMenu = true;// (Context.Request.RequestContext.RouteData.Values["Controller"].ToString() == "Account") ? false : true;
+    var menuData = Newtonsoft.Json.JsonConvert.SerializeObject(Model);
+}
+
+
+<script type="text/javascript">
+    $(document).ready(function () {
+        var showMenu = @(showMenu.ToString().ToLower());         //SET VIA RAZOR CODE
+
+        menuData = @Html.Raw((menuData));
+
+        //SET DIFFERENT MENU & PROFILE CLASS FOR ADMIN VS ANALYST USER
+        //if (menuData.Admin) userClass = "admin"
+        //else userClass = "analyst";
+        userClass = "admin";
+        $("#menuProfileIcon").addClass(userClass);
+        $("#menuDisplayName").html(menuData.Name)
+
+
+        //HIDE MENU ON ACCOUNT VIEWS
+        if (showMenu) {
+
+            //BOOTSTRAP VERSION OF MENU WITH KENDO TEMPLATE
+            var tplMenu = kendo.template($("#tplNavMenu").html());
+            var html = kendo.render(tplMenu, menuData.MenuLinks);
+            $("#menuItems").html(html);
+
+            $('#menuItems li a').each(function () {
+                if ($(this).attr('href') == window.location.pathname) {
+                    $(this).parents("li").find("li").parents('li').first().find(".dropdown-toggle").first().addClass(userClass + '-menu-selected');
+                    $(this).parents("li").first().find("a").addClass(userClass + '-menu-selected');
+                }
+            });
+
+
+
+        }
+    });
+</script>
+
+
+@*@if ((User.Identity.IsAuthenticated)) {*@
+
+<div id="dynamicNav">
+
+    <div class="navbar navbar-default ">
+        <div class="container-fluid">
+
+            <div class="navbar-collapse col-lg-6 col-md-6">
+                <ul class="nav navbar-nav  navbar-left">
+                    <li><a href="/Home"><span class="logoText">Publicis Media Data Lake Administration </span></a></li>
+                </ul>
+            </div>
+
+            <div class=" navbar-collapse navbar-right col-lg-6 col-md-6">
+                <div class="dropdown" style="margin-top:10px">
+                    <a href="#" class="dropdown-toggle" data-toggle="dropdown">
+                        <span class="profile-drop">
+                            <span id="menuDisplayName"></span>
+                            <span id="menuProfileIcon" class="glyphicon glyphicon-user icon-size"></span>
+                            @*<span class="glyphicon glyphicon-chevron-down"></span>*@
+                        </span>
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li>
+
+                            <div class="wrap">
+                                <div class="arrow-up"></div>
+                                <div class="col-lg-12">
+                                    @if (Model.Admin)
+                                    {
+                                        <a href="@Url.Action("Index", "Home", new {area=string.Empty})" target="_parent">Administration View</a>
+                                    }
+                                    @* <br /> *@
+                                    @* <a href="@Url.Action("ChangePassword", "Account", new { area = string.Empty, LinkChange = true })" target="_parent">Change Password</a> *@
+                                    @* <br /> *@
+                                </div>
+                            </div>
+
+                        </li>
+                        <li class="divider"></li>
+                        <li>
+
+                            <div class="wrap">
+                                <div class="col-lg-12">
+
+                                    @* <a href="@Url.Action("Logoff", "Account", new {area=string.Empty})" target="_parent">Log Out</a> *@
+                                    <a href="@Url.Action("Logoff", "Home", new {area=string.Empty})" target="_parent">Log Out</a>
+
+                                </div>
+                            </div>
+
+                        </li>
+                    </ul>
+
+                </div>
+            </div>
+
+            <div class="navbar-header">
+                <button class="navbar-toggle" data-toggle="collapse" data-target="#mainNav">
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                </button>
+            </div>
+
+        </div>
+
+        <br clear="all" />
+        <div class="wrap border">
+            <div class="col-lg-12 col-md-12 col-sm-12">
+                <div class="collapse navbar-collapse" id="mainNav">
+                    <ul class="nav navbar-nav" id="menuItems"></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+
+</div>
+
+@*}
+else {
+    <a href="/Home"><span class="logoText">Publicis Media Data Lake Administration </span></a>
+        <li class="nav-item">
+            <a class="nav-link text-dark" asp-controller="Account" asp-action="Login">log in</a>
+        </li>
+}*@
+
+
+<div class="clear"> </div>
+
+@*<script type="text/javascript">
+    var mainHub = undefined;
+    $(function () {
+        //mainHub = mainHub;
+        mainHub = mainHub || new com.stallion.signalr();
+
+
+
+    });
+</script>*@
+
+
+
+@*<script type="text/javascript" src="~/signalr/hubs"></script>*@
+@*<script src="~/lib/signalr/signalr.js"></script>*@
+<script src="~/js/signalr/dist/browser/signalr.js"></script>
+@*<script type="text/javascript" defer>
+    namespace("com.stallion.signalr")
+    com.stallion.signalr = function () { isInit = false; }
+    com.stallion.signalr.prototype = (function (enableLogging) {
+        var stallionChatHub = undefined;
+        var kendoNotification = undefined;
+
+        var mainConnectionHub = (function init() {
+            if (!this.isInit) {
+                this.isInit = true;
+
+                //stallionChatHub = function () {
+                //    if (this.chatHub === undefined) {
+                //        this.chatHub = $.connection.greenhouseUIMainHub;
+
+                //        $.extend(this.chatHub.client, function () {
+                //            messageReceived = function (msg) {
+                //                alert("broacasted to all users=>" + msg);
+                //            }
+                //                , messageReceivedAgain = function (msg) {
+
+                //                    alert("I got your message => " + msg);
+                //                };
+                //            return {
+                //                messageBroadcast: messageReceived,
+                //                sendMessage: messageReceivedAgain
+                //            }
+                //        }());
+                //    }
+                //    return this.chatHub;
+                //}() //end IIF
+
+                mainConnectionHub = $.connection.hub; //this is from jquery not Kendo
+                mainConnectionHub.logging = enableLogging;
+                mainConnectionHub
+                    .start();
+                    //.done(function connect() {
+                    //    //stallionChatHub.server.connect();
+                    //});
+            }
+            return mainConnectionHub;
+        })(); //end IIF
+
+        this.notification = function (e) {
+
+            if (kendoNotification === undefined) {
+                kendoNotification = $("#notification").kendoNotification({
+                    position: {
+                        pinned: true,
+                        top: 30,
+                        right: 30
+                    },
+                    autoHideAfter: 0,
+                    width: "240px",
+                    stacking: "down",
+                    templates: [{
+                        // define a custom template for the built-in "warning" notification type
+                        type: "info",
+                        template: $("#info-notification").html()
+                    }, {
+                        // define a template for the custom "timeAlert" notification type
+                        type: "timeAlert",
+                        template: "<div class='myAlert'>System alert generated at #= time # : #= myMessage #</div>"
+                        // template content can also be defined separately
+                        //template: $("#myAlertTemplate").html()
+                    }]
+
+                }).data("kendoNotification");
+            }
+
+
+            kendoNotification.show({ message: "A record has been " + e.type }, "info")
+        }
+
+        var logging = function (active) {
+            mainConnectionHub.logging = active;
+        }
+
+        return {
+            EnableLogging: logging,
+            MessagingHub: stallionChatHub,
+            ConnectionHub: mainConnectionHub,
+            Notify: notification
+        }
+    })(false);
+
+</script>
+*@
+
+
+
+<script type="text/x-kendo-template" id="tplNavMenu" defer>
+    # var itemsTemplate  =kendo.template($("\\#tplMenuItems").html(),{useWithBlock:false});#
+    # if (data.items){#
+    <li class="dropdown">
+        <a href="\\#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">#=data.text#<span class="caret"></span></a>
+        <ul class="dropdown-menu">
+            #= kendo.render(itemsTemplate, data.items)#
+        </ul>
+    </li>
+    #}else{#
+    <li><a href="#=data.url#">#=data.text#</a></li>
+    #}#
+</script>
+
+<script type="text/x-kendo-template" id="tplMenuItems" defer>
+    <li><a href="#=data.url#">#=data.text#</a></li>
+</script>

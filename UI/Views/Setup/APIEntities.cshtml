@@ -1,0 +1,600 @@
+﻿@{
+    ViewBag.Title = "API Entities";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<style>
+    .container {
+        width: 100%;
+    }
+</style>
+
+<div class="dragoMain" id="userTableContainer">
+    <div id="gridContainer" class="toolControlContainer tc-Main">
+        <header>
+            <h2>API Entity Setup</h2>
+        </header>
+        <div id="kGrid" class="toolControl">
+        </div>
+    </div>
+</div>
+
+@section scripts
+{
+    <script src="~/Scripts/Greenhouse/common.js"></script>
+    <script type="text/javascript">
+
+        $(function() {
+            $(".dragoMain").parents(".container").removeClass("container");
+            var url = "/apiEntityHub";
+
+            var apiEntityHub = new signalR.HubConnectionBuilder()
+            .withUrl(url, {
+                transport: signalR.HttpTransportType.LongPolling
+            })
+            .build();
+
+            var lyrGrid = $("#kGrid");
+            var timeZoneOffset = new Date().getTimezoneOffset() * 60 * 1000;
+
+            var tplcheck = kendo.template($("#tplCheck").html());
+
+            fnShowLoading(true);
+
+            //to make sure all datasources are loaded before rendering grid.
+            var dsCounter = DataSourceCounter();
+
+            var dsSources = GetDataSource("GetAPIEntitySources", "SourceID", "SourceName");
+            dsSources.fetch(fnBindAPIentityDatasource);
+
+            var integrationList;
+            var dsIntegrations = GetDataSource("GetActiveIntegrations", "ActiveIntegrationId", "ActiveIntegrationName");
+            dsIntegrations.fetch(fnBindAPIentityDatasource).then(() => {
+                integrationList = dsIntegrations.data();
+            });
+            
+            var tplData = kendo.template($("#tplDataDisplayName").html());
+
+            var dsAPIentity = APIEntityDataSource();
+
+            lyrGrid.kendoGrid({
+                    dataSource: dsAPIentity,
+                    autoBind: false,
+                    columns:
+                    [
+                        {
+                            command: [
+                                { name: "edit", text: "", template: "<a class='btn-small lnkEdit'><i class='fa fa-pencil-square-o grid-edit-link'></i></a>", width: 10 }, {
+                                    //name: "destroy", template: "<a id='deletelnk' class='btn-small lnkDelete'><i class='fa fa-times grid-edit-link'></i></a>", text: "", width: 10,
+                                    name: "destroy",
+                                    template: "<a id='deletelnk'><i class='fa fa-times grid-edit-link'></i></a>",
+                                    text: "",
+                                    width: 10,
+                                }
+                            ],
+                            width: 140,
+                            title: "<button id='btnAdd' class='btn btn-primary'>Add API Entity</button>",
+                            menu: false
+                        },
+                        { field: "APIEntityCode", title: "Code", width: "180px" },
+                        { field: "APIEntityName", title: "Name", width: "130px" },
+                        { field: "SourceID", title: "Source", width: "170px", template: "#=fnTemplateData('dsSources', SourceID) #", filterable: { ui: sourceFilter } },
+                        { field: "IntegrationID", title: "Integration", width: "170px", template: "#=fnTemplateData('dsIntegrations', IntegrationID) #", filterable: { ui: integrationFilter } },
+                        { field: "StartDate", title: "Start Date", width: "150px", template: "#=kendo.toString(StartDate, 'd')#" },
+                        { field: "TimeZone", title: "Time Zone", width: "150px" },
+                        {
+                            field: "IsActive",
+                            title: "Active?",
+                            width: "100px",
+                            template: '#=fnTemplateCheck(IsActive)#',
+                            filterable: {
+                                multi: true,
+                                checkAll: false,
+                                itemTemplate: function(ee) {
+                                    return "<div><input type='checkbox' name='rb" + ee.field + "' value='#=data.IsActive#'/># if(data.IsActive) {# <i class='glyphicon glyphicon-ok green'/> #}else{# <i class='glyphicon glyphicon-remove red'/>#}#</div>";
+                                }
+                            }
+                        }, {
+                            field: "EntityPriorityOrder",
+                            title: "Entity Priority Order",
+                            width: "100px",
+                            headerAttributes: { style: "white-space:pre-wrap; word-wrap:break-word" },
+                            filterable: {
+                                multi: true,
+                                checkAll: false
+                            }
+                        }, {
+                            field: "BackfillPriority",
+                            title: "Backfill Priority",
+                            width: "100px",
+                            template: '#=fnTemplateCheck(BackfillPriority)#',
+                            headerAttributes: { style: "white-space:pre-wrap; word-wrap:break-word" },
+                            filterable: {
+                                multi: true,
+                                checkAll: false,
+                                itemTemplate: function(ee) {
+                                    return "<div><input type='checkbox' name='rb2" + ee.field + "' value='#=data.BackfillPriority#'/># if(data.BackfillPriority) {# <i class='glyphicon glyphicon-ok green'/> #}else{# <i class='glyphicon glyphicon-remove red'/>#}#</div>";
+                                }
+                            }
+                        }
+                        //, { field: "CreatedDate", title: "Created", template: "#=kendo.toString(CreatedDate, 'G')#", width: "200px" }
+                        , { field: "LastUpdated", title: "Last Updated", template: "#=kendo.toString(LastUpdated, 'G')#", width: "200px" }
+                    ],
+                    editable: {
+                        mode: "popup",
+                        edit: true,
+                        destroy: true,
+                        create: true
+                        //, confirmation: "Are you sure you want to delete this?"
+                        ,
+                        template: $("#apiEntityTemplate").html()
+                    },
+                    sortable: { mode: "multiple" },
+                    columnMenu: gridColumMenuOptions,
+                    filterable: gridFilterOptions,
+                    resizable: true,
+                    pageable: true,
+                    scrollable: { virtual: false },
+                    edit: function(evt) {
+                        var container = $(evt.container);
+                        container.width("460").height("650");
+
+                        var updateIntegrationDropDown = () => {
+                            var data = integrationList.filter((val) => val.SourceID == evt.model.SourceID);
+
+                            dsIntegrations.data(data);
+                            
+                            if (data.length == 0) {
+                                ddlIntegrations.kendoDropDownList({
+                                    dataSource: [],
+                                    dataTextField: "Name",
+                                    dataValueField: "ID",
+                                    optionLabel: "--ERROR: No Integration--",
+                                });
+                            } else {
+                                ddlIntegrations.kendoDropDownList({
+                                    dataSource: dsIntegrations,
+                                    dataTextField: "Name",
+                                    dataValueField: "ID",
+                                    optionLabel: "--Select an Integration--",
+                                });
+                            }
+
+
+                        }
+
+                        var ddlSources = container.find("#SourceID");
+                        ddlSources.kendoDropDownList({
+                            dataSource: dsSources,
+                            dataTextField: "Name",
+                            dataValueField: "ID",
+                            optionLabel: "--Select a Source--",
+                            change: updateIntegrationDropDown
+                        });
+
+
+                        var ddlIntegrations = container.find("#IntegrationID");
+
+                        updateIntegrationDropDown();
+
+                        var dtStartDate = container.find("#StartDate");
+                        dtStartDate.kendoDatePicker();
+
+                        var win = container.data("kendoWindow");
+                        win.center();
+                        var title = (evt.model.APIEntityName == "") ? "Add New API Entity" : "Editing [" + evt.model.APIEntityName + "]";
+                        win.title(title);
+
+                        var isActiveChekbox = container.find("#IsActive");
+                        var isNewServer = (evt.model.APIEntityName == "");
+                        if (isNewServer) {
+                            isActiveChekbox.prop("checked", true);
+                            evt.model.IsActive = true;
+                        } else {
+                            if (evt.model.IsActive) {
+                                isActiveChekbox.prop("checked", true);
+                            } else {
+                                isActiveChekbox.prop("checked", false);
+                            }
+                        }
+
+                        SetValidationAPIEntity(container);
+
+                    } //end edit
+                    ,
+                    dataBound: OnGridDataBind,
+                    confirmation: "Are you sure you want to delete this?",
+                    save: function(evt) {
+                        var validator = evt.container.find(".lyrEdit").data("kendoValidator");
+                        if (!validator.validate()) {
+                            evt.preventDefault();
+                        }
+
+                        // for Prefix-only
+                        if (evt.model.MatchType == "Prefix" && !evt.model.RegexMask.trimEnd().endsWith(".+"))
+                            evt.model.RegexMask += ".+";
+
+                    } //end save
+
+                }).data("kendoGrid")
+                .wrapper.height("600px");
+
+
+            // ====================================================================================================
+            //$(document).on("click", "a#deletelnk.btn-small.lnkDelete", function (e) {
+            $(document).on("click",
+                "a#deletelnk",
+                function(e) {
+                    e.preventDefault();
+
+                    //alert("TEST");
+
+                    var dataItem = lyrGrid.data("kendoGrid").dataItem(e.target.closest("tr"));
+                    var APIEntityID = dataItem.APIEntityID;
+
+                    if (!confirm("Are you sure you want to delete this?"))
+                        return;
+
+                    $.ajax({
+                        url: baseUrl + "/DeleteAPIEntityUponValidation",
+                        data: { APIEntityID: APIEntityID },
+                        type: "POST",
+                        dataType: "json",
+                        success: function(data2) {
+                            console.log(data2);
+                            if (data2.IsAPIEntityDeleted) {
+                                var dataSource = $("#kGrid").data("kendoGrid").dataSource;
+                                dataSource.remove(dataItem);
+                            } else
+                                alert("Unable to delete due to associated elements.");
+
+                        },
+                        error: OnError
+                    });
+                });
+            // ====================================================================================================
+
+
+            // ====================================================================================================
+            //tooltip
+            lyrGrid.kendoTooltip({
+                show: function(e) {
+                    if (this.content.text() != null && this.content.text().length > 0) {
+                        this.content.parent().css("visibility", "visible");
+                    }
+                },
+                hide: function(e) {
+                    this.content.parent().css("visibility", "hidden");
+                },
+                filter: "td:nth-child(4)",
+                position: "bottom",
+                content: function(e) {
+                    var dataItem = lyrGrid.data("kendoGrid").dataItem(e.target.closest("tr"));
+                    var content = dataItem.RegexMask;
+                    return content;
+                }
+            });
+
+            lyrGrid.kendoTooltip({
+                show: function(e) {
+                    if (this.content.text() != null && this.content.text().length > 0) {
+                        this.content.parent().css("visibility", "visible");
+                    }
+                },
+                hide: function(e) {
+                    this.content.parent().css("visibility", "hidden");
+                },
+                filter: "td:nth-child(10)",
+                position: "bottom",
+                content: function(e) {
+                    var dataItem = lyrGrid.data("kendoGrid").dataItem(e.target.closest("tr"));
+                    var content = dataItem.TimeZoneString;
+                    return content;
+                }
+            });
+
+            lyrGrid.kendoTooltip({
+                show: function(e) {
+                    if (this.content.text() != null && this.content.text().length > 0) {
+                        this.content.parent().css("visibility", "visible");
+                    }
+                },
+                hide: function(e) {
+                    this.content.parent().css("visibility", "hidden");
+                },
+                filter: "td:nth-child(11)",
+                position: "bottom",
+                content: function(e) {
+                    var dataItem = lyrGrid.data("kendoGrid").dataItem(e.target.closest("tr"));
+                    var content = dataItem.EndpointURI;
+                    return content;
+                }
+            });
+            // ====================================================================================================
+
+
+            function SetValidationAPIEntity(container) {
+                var validator = container.find("#lyrEditAPIEntity").kendoValidator({
+                    rules: {
+                        required: function(input) {
+                            if (input.is("[class*='required']")) {
+                                if (!$.trim(input.val()))
+                                    return false;
+                                return true;
+                            }
+                            return true;
+                        },
+                        urlvalid: function(input) {
+                            if (input.is("[class*='urlvalid']")) {
+                                if (!ValidUrl(input.val()))
+                                    return false;
+                                return true;
+                            }
+                            return true;
+                        },
+                        uniqueValues: function(input) {
+                            if (!input.hasClass("unique"))
+                                return true;
+
+                            let inputs = container.find(".unique");
+                            let grid = lyrGrid.getKendoGrid();
+                            let arr = []
+                            inputs.each(function(i, a) {
+                                var str = { field: $(a).attr("id"), operator: "eq", value: $(a).val().toString() }
+                                arr.push(str)
+                            });
+
+                            let filteredSet = kendo.data.Query.process(grid.dataSource.data(), { filter: arr });
+                            return !(filteredSet.data.length > 1);
+
+                        }
+                    } //end rules
+                    ,
+                    messages: {
+                        required: "* required",
+                        urlvalid: "* check url",
+                        uniqueValues: "* must be unique"
+                    },
+                    validateOnBlur: false
+                });
+            }
+
+            function APIEntityDataSource() {
+                return new kendo.data.DataSource({
+                    type: "signalr",
+                    autoSync: false,
+                    transport: {
+                        signalr: {
+                            promise: apiEntityHub.start(),
+                            hub: apiEntityHub,
+                            server: {
+                                read: "read",
+                                create: "create",
+                                destroy: "destroy",
+                                update: "update"
+                            },
+                            client: {
+                                read: "read",
+                                create: "create",
+                                destroy: "destroy",
+                                update: "update"
+                            }
+                        },
+                        parameterMap: function(option, type) {
+                            if (type === "create") {
+                                //option.GUID = kendo.guid();
+                            }
+                            return option;
+                        }
+                    } //end transport
+                    ,
+                    error: function(e) {
+                        alert(e.xhr.toString());
+                    },
+                    schema: {
+                        model: {
+                            id: "APIEntityID",
+                            fields: {
+                                APIEntityID: { type: "number" },
+                                APIEntityCode: { type: "string" },
+                                APIEntityName: { type: "string" },
+                                SourceID: { type: "number" },
+                                IntegrationID: { type: "number" },
+                                StartDate: { type: "date", format: "MM/dd/yyyy" },
+                                TimeZone: { type: "string" },
+                                IsActive: { type: "boolean" },
+                                EntityPriorityOrder: { type: "number", defaultValue: null },
+                                BackfillPriority: { type: "boolean" }
+                                //, CreatedDate: { type: "date", format: "MM/dd/yyyy" }
+                                ,
+                                LastUpdated: { type: "date", format: "MM/dd/yyyy", parse: function (value) { return parseUTCDate(value) } }
+                            }
+                        },
+                        parse: function(data) {
+                            if (type(data) === "array") {
+                                $.each(data,
+                                    function fnOffSetFileStartDateTime(i, elem) {
+                                        elem.FileStartDate = new Date(Date.parse(elem.FileStartDate) + timeZoneOffset);
+                                    });
+                            } else {
+                                data.StartDate = kendo.timezone.apply(kendo.parseDate(data.StartDate), "Etc/UTC")
+                            }
+                            return data;
+                        }
+                    },
+                    serverPaging: false,
+                    serverSorting: false,
+                    serverFiltering: false,
+                    pageSize: 15
+                });
+            }
+
+            function DataSourceCounter() {
+                var counter = 1;
+                var maxSources = 1;
+                return {
+                    Add: function() {
+                        return counter++;
+                    },
+                    GetMaxSourceCount: function() {
+                        return maxSources;
+                    }
+                }
+            }
+
+            function fnBindAPIentityDatasource() {
+                if (dsCounter.Add() >= dsCounter.GetMaxSourceCount()) {
+                    fnShowLoading(false);
+                    dsAPIentity.fetch();
+                }
+            }
+
+            function sourceFilter(ele) {
+                ele.kendoDropDownList({
+                    dataSource: dsSources,
+                    dataTextField: "Name",
+                    dataValueField: "ID",
+                    optionLabel: "--Select--"
+                }).data("kendoDropDownList").wrapper.width("250px");
+            }
+
+            function integrationFilter(ele) {
+                ele.kendoDropDownList({
+                    dataSource: dsIntegrations,
+                    dataTextField: "Name",
+                    dataValueField: "ID",
+                    optionLabel: "--Select--"
+                }).data("kendoDropDownList").wrapper.width("250px");
+            }
+
+            fnTemplateData = function(dsName, idField) {
+                var ds = eval(dsName);
+                var htm = tplData({
+                    DataSource: ds.data(),
+                    ID: idField
+                });
+                return htm;
+            }
+
+            fnTemplateCheck = function(value) {
+                var isChecked = (value != '0') || (value === true);
+                var htm = tplcheck({
+                    Val: isChecked
+                });
+                return htm;
+            }
+
+        });
+
+        function OnError() {
+            alert("Failed!");
+        }
+    </script>
+    }
+    <script id="apiEntityTemplate" type="text/html">
+        <div id='lyrEditAPIEntity' class="lyrEdit">
+            <div class="control-group">
+                <label for="apiEntityName" class="control-label" style="width: 200px;">API Entity Name:</label>
+                <div class="controls"><input type="text" class="required form-control" id="apiEntityName" style='width: 375px; height: 34px' name="apiEntityName" data-bind="value:APIEntityName" tabindex="0"/></div>
+            </div>
+            <div class="control-group">
+                <label for="apiEntityCode" class="control-label" style="width: 200px;">API Entity Code:</label>
+                <div class="controls"><input type="text" class="required form-control" id="apiEntityCode" style='width: 375px; height: 34px' name="apiEntityCode" data-bind="value:APIEntityCode"/></div>
+            </div>
+            <div class="control-group">
+                <label for="SourceID" class="control-label" style="width: 200px;">Source:</label>
+                <div class="controls"><input type="text" id="SourceID" class="required" style='width: 400px;' name="SourceID" data-bind="value: SourceID" tabindex="3"/></div>
+            </div>
+            <div class="control-group">
+                <label for="IntegrationID" class="control-label" style="width: 200px;">Integration:</label>
+                <div class="controls"><input type="text" id="IntegrationID" class="required" style='width: 400px;' name="IntegrationID" data-bind="value: IntegrationID" tabindex="3"/></div>
+            </div>
+            <div class="control-group">
+                <label for="StartDate" class="control-label" style="width: 200px;">Start Date:</label>
+                <div class="controls"><input id="StartDate" name="StartDate" style='width: 430px; height: 34px' data-role="datepicker" data-bind="value: StartDate"/></div>
+            </div>
+            <div class="control-group">
+                <label for="TimeZone" class="control-label" style="width: 200px;">Time Zone:</label>
+                <div class="controls"><input type="text" class="form-control" id="TimeZone" style='width: 375px; height: 34px' name="TimeZone" data-bind="value:TimeZone"/></div>
+            </div>
+            <div class="control-group">
+                <label for="EntityPriorityOrder" class="control-label" style="width: 200px;">Entity Priority Order:</label>
+                <div class="controls"><input type="text" class="form-control" id="EntityPriorityOrder" style='width: 375px; height: 34px' name="EntityPriorityOrder" data-bind="value:EntityPriorityOrder"/></div>
+            </div>
+            <div class="control-group">
+                <label for="BackfillPriority" class="control-label" style="width: 200px;">Backfill Priority?: </label>
+                <div class="controls"><input type="checkbox" id="BackfillPriority" name="BackfillPriority" data-bind="checked: BackfillPriority"/></div>
+            </div>
+            <div class="control-group">
+                <label for="IsActive" class="control-label" style="width: 200px;">Active?: </label>
+                <div class="controls"><input type="checkbox" id="IsActive" name="IsActive" data-bind="checked: IsActive"/></div>
+            </div>
+        </div>
+    </script>
+
+
+
+    @*===========================================================================================================================*@
+
+
+
+
+
+
+
+    <script id="tplCheck" type="text/x-kendo-template">
+    #
+    var iconClass = "glyphicon glyphicon-ok green";
+    if(!Val) {
+    iconClass = "glyphicon glyphicon-remove red";
+    }
+    #
+    <div style='text-align:center'><i class="#=iconClass#">&nbsp;</i></div>
+</script>
+
+    <script id="tplPopoverColumn" type="text/x-kendo-template">
+    #
+    if (!Val ) return "";
+    var ellipsisText = (Val.length >20) ? Val.substr(0,25)+'
+    <b>...</b>': Val;
+
+    var panelTemplate=  kendo.template($("\#popOverPanelHTML").html());
+    var content = panelTemplate({Text: data.Val, Title: data.Title}, {useWithBlock:false});
+    #
+
+    <div class="tooltipped" title="#=Title#" data-content='#=content#'>#=ellipsisText#</div>
+</script>
+    <script>
+        function trimText(txt, len) {
+            if (!txt)
+                return '';
+            if (txt.length > len)
+                return txt.substring(0, len) + '...';
+            else
+                return txt;
+        }
+    </script>
+    <script type="text/x-kendo-template" id="popOverPanelHTML">
+    <div class="k-block"><div class="k-header k-shadow">#=data.Title#</div>#=data.Text#</div>
+</script>
+    <script id="tplPopoverColumnItemList" type="text/x-kendo-template">
+    #var ellipsisText = (Val.length >20) ? Val.substr(0,20)+'
+    <b>...</b>': Val;#
+    <div class="popoversList" title="#=Title#" data-content="<div style='width:550px'>#=ListItems#</div>">#=ellipsisText#</div>
+</script>
+
+    <script id="tplDataDisplayName" type="text/x-kendo-template">
+    <div>
+        # var obj = $.grep(DataSource, function(ele,id){return ele.ID == ID});
+        if(obj.length == 1){
+        #
+        #=obj[0].Name#
+        #}#
+    </div>
+</script>
+
+    <style>
+        .popover {
+            max-width: 550px;
+        }
+    </style>

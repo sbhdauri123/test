@@ -1,0 +1,105 @@
+﻿
+@{
+
+    ViewBag.Title = "User Management";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+}
+
+<style>
+    .container {
+        width: 100%;
+    }
+</style>
+
+<script>
+    function trimText(txt, len) {
+        if (!txt)
+            return '';
+        if (txt.length > len)
+            return txt.substring(0, len) + '...';
+        else
+            return txt;
+    }
+</script>
+
+@*<link rel="stylesheet" href="@Url.Content("~/Content/kendo/2017.3.1026/kendo.common.min.css")">
+    <link rel="stylesheet" href="@Url.Content("~/Content/kendo/2017.3.1026/kendo.default.min.css")">*@
+
+<link rel="stylesheet" href="https://kendo.cdn.telerik.com/2017.3.1026/styles/kendo.default.min.css" />
+<link rel="stylesheet" href="https://kendo.cdn.telerik.com/2017.3.1026/styles/kendo.common.min.css" />
+<script src="@Url.Content("~/Scripts/kendo/2017.3.1026/kendo.all.min.js")"></script>
+
+<div class="ghMain" id="pageContainer">
+    <div id="userContainer" class="toolControlContainer tc-Main">
+        <header>
+            <h2>Redshift User Access</h2>
+        </header>
+
+        <div id="userGrid">
+            <div id="child"></div>
+        </div>
+    </div>
+
+</div>
+
+<script src="~/Scripts/Greenhouse/common.js"></script>
+<script type="text/javascript" src="~/Scripts/setup/manageusers.js"></script>
+
+<script type="text/template" id="editTemplate">
+    <div id="lyrEdit" class="lyrEdit">
+        <div class="control-group">
+            <div class="controls">
+                <label for="tbUserID" id="lblUserID" class="control-label k-bold bold" style="min-width:200px">User ID</label>
+                <div class="controls">
+                    <select id="tbUserID" name="User ID" class="form-control required" required="required"></select>
+                </div>
+            </div>
+        </div>
+        <div class="control-group">
+            <div class="controls" id="dataSourceControls">
+                <label for="selectedDataSource" id="lblSelectedDataSource" class="control-label k-bold bold" style="min-width:200px">Filter Unmapped and Mapped Advertisers by Data Source</label>
+                <div class="controls">
+                    <select id="selectedDataSource" name="selectedDataSource" class="form-control" data-bind="value: DataSource"></select><span id="requiredDataSourceMessage" class="required">* Select a Data Source to get started</span>
+                </div>
+
+            </div>
+        </div>
+        <div class="control-group">
+            <div class="controls">
+                <div class="controls">
+                    <input type="text" id="tbTextFilter" name="Text Filter" class="form-control" data-bind="value: TextFilter" placeholder="Filter Unmapped Advertisers by Text" />
+                </div>
+            </div>
+        </div>
+        <div class="control-group">
+            <div class="controls" style="width:1100px">
+                <label for="optionalAdvertisers" id="lblOptional" class="control-label k-bold bold" style="min-width:200px"><span id="availableAdvertiserCount" data-bind="text: displayCount"></span></label>
+                <div class="controls displayflex hidetoolbar">
+                    <select id="optionalAdvertisers" class="form-control"></select>
+
+                    <div class="k-listbox-toolbar showtoolbar">
+                        <ul class="k-reset">
+                            <li><a class="k-button k-button-icon " id="advertiserMoveRight"><span class="k-icon k-i-arrow-60-right"></span></a></li>
+                            <li><a class="k-button k-button-icon " id="advertiserMoveLeft"><span class="k-icon k-i-arrow-60-left"</span></a></li>
+                            <li><a class="k-button k-button-icon " id="advertiserMoveAllRight"><span class="k-icon k-i-arrow-double-60-right"></span></a></li>
+                            <li><a class="k-button k-button-icon " id="advertiserMoveAllLeft"><span class="k-icon k-i-arrow-double-60-left"</span></a></li>
+                        </ul>
+                    </div>
+
+
+                    <select id="selectedAdvertisers" class="form-control"></select>
+                </div>
+            </div>
+        </div>
+        <div class="control-group">
+            <div class="controls" style="width:1100px">
+                <label for="optionalInstances" id="lblInstanceOptional" class="control-label k-bold bold" style="min-width:200px"><span id="availableInstanceCount" data-bind="text: displayCount"></span></label>
+                <div class="controls">
+                    <select id="optionalInstances" class="form-control"></select>
+                    <select id="selectedInstances" class="form-control"></select>
+                </div>
+            </div>
+        </div>
+    </div>
+</script>

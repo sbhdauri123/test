@@ -1,0 +1,6 @@
+﻿# Logs
+*.log
+logs/
+
+# Temp files
+files/

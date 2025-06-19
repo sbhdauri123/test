@@ -1,0 +1,396 @@
+﻿@{
+    ViewBag.Title = "Advertiser Admin";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="dragoMain" id="userTableContainer">
+    <div id="gridContainer" class="toolControlContainer tc-Main">
+        <header>
+            <h2>Advertiser Administration</h2>            
+            <div id="ddlDataSources"></div>
+        </header>
+        <div id="kGrid" class="toolControl">
+        </div>
+    </div>
+</div>
+
+@section scripts
+{
+<script src="~/Scripts/Greenhouse/common.js"></script>
+<script type="text/javascript">   
+
+    $(function ()
+    {
+        //// Pre-populate the dropdown for TimeZone... (USED FOR INLINE EDITING)
+        //function GetTimeZones() {
+        //    return new kendo.data.DataSource({
+        //        transport: {
+        //            read: {
+        //                url: baseUrl + "/GetAllTimeZones"
+        //                , type: "GET"
+        //                , dataType: "json"
+        //            }
+        //        }
+        //        , schema: {
+        //            model: {
+        //                id: "TimeZoneName",
+        //                fields: {
+        //                    TimeZoneName: { type: "string" }
+        //                }
+        //            }
+        //        }
+        //    });
+        //}
+
+        //var dsTimeZones = GetTimeZones();
+        //dsTimeZones.fetch();
+
+        // ===========================================================================================================================================================
+
+    	var lyrGrid = $("#kGrid");
+
+        var url = "/advertiserAdminHub";
+
+        var advertiserAdminHub = new signalR.HubConnectionBuilder()
+        .withUrl(url, {
+            transport: signalR.HttpTransportType.LongPolling
+        })
+        .build();
+
+        var ddlDataSources = $("header").find("#ddlDataSources").kendoDropDownList({
+            dataSource: GetDataSource("GetGreenhouseDataSources", "DataSourceID", "DataSourceName")
+            , dataTextField: "Name"
+            , dataValueField: "ID"
+            , optionLabel: "--Select Source--"
+            , change: function ()
+            {
+                var val = this.value();
+                if (val)
+                    kg.dataSource.read({ data: val });
+                else
+                    kg.dataSource.data([]);
+            }
+        }).data("kendoDropDownList");
+
+        // ===========================================================================================================================================================
+
+        var dsMasterClients = GetDataSource("GetMasterClients", "MasterClientID", "MasterClientName");
+        dsMasterClients.fetch();
+        var dsIntegrations = GetDataSource("GetIntegrations", "IntegrationID", "IntegrationName");
+        dsIntegrations.fetch();
+        var dsCountries = GetDataSource("GetCountries", "CountryID", "CountryName");
+        dsCountries.fetch();
+        var dsTimeZones = GetDataSource("GetAllTimeZones", "TimeZone", "TimeZoneName");
+        dsTimeZones.fetch();
+
+        var tplData = kendo.template($("#tplDataDisplayName").html());
+        var tplcheck = kendo.template($("#tplCheck").html());
+
+        var kg = lyrGrid.kendoGrid({
+            dataSource: AdvertiserMappingDataSource()
+            , autoBind:false
+            , columns: [
+                 {
+                     command: [
+                         { name: "edit", text: "edit", template: "<a class='btn-small lnkEdit'><i class='fa fa-pencil-square-o grid-edit-link'></i></a>", width: 10 }
+                     ], width: "65px"
+                     , menu:false
+                 }
+               , { hidden: true, field: "AdvertiserMappingID"}
+               , { field: "AdvertiserNameDisplay", title: "Advertiser Name", width: "300px", editor: function (element, options) { element.text(options.model.AdvertiserName) } }
+               , { field: "MasterClientID", title: "Master Client", width: "170px", template: "#=fnTemplateData('dsMasterClients', MasterClientID) #", filterable: { ui: masterclientFilter } }
+               , { field: "IntegrationID", title: "Integration", width: "170px", template: "#=fnTemplateData('dsIntegrations', IntegrationID) #", filterable: { ui: integrationFilter } }
+               , { field: "CountryID", title: "Country", width: "150px", template: "#=fnTemplateData('dsCountries', CountryID) #", filterable: { ui: countryFilter } }
+               //, { field: "TimeZone", title: "Time Zone", width: "250px", editor: timezoneDropDownEditor }
+               , { field: "TimeZone", title: "Time Zone", width: "250px", filterable: { ui: timezoneFilter } }
+               , {
+                   field: "IsActive", title: "Active?", width: "150px", template: '#=fnTemplateCheck(IsActive)#',
+                   filterable: {
+                       multi: true,
+                       checkAll: false,
+                       itemTemplate: function (ee) {
+                           return "<div><input type='checkbox' name='rb" + ee.field + "' value='#=data.IsActive#'/># if(data.IsActive) {# <i class='glyphicon glyphicon-ok green'/> #}else{# <i class='glyphicon glyphicon-remove red'/>#}#</div>";
+                       }
+                   }
+               }
+               , { field: "LastUpdated", title: "Last Updated", template: "#=kendo.toString(LastUpdated, 'G')#", width: "200px" }
+            ]
+            , editable: {
+                mode: "popup"
+                , template: $("#tplTimeZones").html()
+            }
+            , dataBound: OnGridDataBind
+            , edit: function (evt) {
+
+                onEdit(evt);
+
+                var container = evt.container;
+                container.width("450").height("300");
+
+                var win = container.data("kendoWindow");
+                var title = "Editing [" + evt.model.AdvertiserName + "]";
+                console.log("title", title);
+                win.title(title);
+
+                var ddlTimeZones = container.find("#TimeZone");
+                ddlTimeZones.kendoDropDownList({
+                    dataSource: dsTimeZones
+                    , dataTextField: "Name"
+                    , dataValueField: "ID"
+                    , valuePrimitive: true
+                    , optionLabel: "--"
+                });
+
+                SetValidation(container);
+                win.center().open();
+            }
+            , save: function (evt) {
+
+                var container = evt.container;
+                var validator = evt.container.find(".lyrEdit").data("kendoValidator");
+                if (!validator.validate())
+                    evt.preventDefault();
+            }
+           , sortable: { mode: "multiple" }
+           , columnMenu: gridColumMenuOptions
+           , filterable: gridFilterOptions
+           , resizable: true
+           , pageable: true
+           , scrollable: true 
+        }).data("kendoGrid");
+        kg.wrapper.height("570px");
+
+        // Used to make AdvertiserName non-editable
+        function onEdit(e) {
+            $("#AdvertiserName").attr("readonly", true);
+        }
+
+        // ===========================================================================================================================================================
+
+        function SetValidation(container) {
+            var validator = container.find("#lyrTimeZoneEdit").kendoValidator({
+                rules: {
+                    required: function (input) {
+                        if (input.is("[class*='required']")) {
+                            if (!$.trim(input.val()))
+                                return false;
+                            return true;
+                        }
+                        return true;
+                    },
+                    urlvalid: function (input) {
+                        if (input.is("[class*='urlvalid']")) {
+                            if (!ValidUrl(input.val()))
+                                return false;
+                            return true;
+                        }
+                        return true;
+                    }
+                }//end rules
+                , messages: {
+                    required: "* required",
+                    urlvalid: "* check url"
+                }
+                , validateOnBlur: false
+            });
+        }
+
+        function AdvertiserMappingDataSource() {
+            return new kendo.data.DataSource({
+                type: "signalr",
+                autoSync: false,
+                transport: {
+                    signalr: {
+                        promise: advertiserAdminHub.start(),
+                        hub: advertiserAdminHub,
+                        server: {
+                            read: "readAll"
+			                //, create: "create"
+			                //, destroy: "destroy"
+			                , update: "update"
+                        },
+                        client: {
+                            read: "readAll"
+			                //, create: "create"
+			                //, destroy: "destroy"
+			                , update: "update"
+                        }
+                    }
+                    , parameterMap: function (option, type) {
+                        if (type != "read") {
+                            if (type == "create") {
+                                //option.GUID = kendo.guid();
+                            }
+                        }
+                        else {
+                            option = option.data.toString(); //data set by source dropdown, and controller expecting param strings[]
+                        }
+                        return option;
+                    }
+                },
+                schema: {
+                    model: {
+                        id: "AdvertiserMappingID",
+                        fields: {
+                            AdvertiserMappingID: { type: "number" }
+                            , AdvertiserName: { editable: false, type: "string" }
+                            , AdvertiserNameDisplay: { editable: false, type: "string" }
+                            , AdvertiserID: { editable: false, type: "string" }
+                            , MasterClientID: { editable: false, type: "number" }
+                            , IntegrationID: { editable: false, type: "number" }
+                            , CountryID: { editable: false, type: "number" }
+                            , DataSourceID: { editable: false, type: "number" }
+                            , DataSourceName: { editable: false, type: "string" }
+                            //, TimeZone: { defaultValue: { TimeZoneName: "US/Eastern", TimeZoneName: "US/Eastern" } }
+                            , TimeZone: { type: "string" }
+                            , IsActive: { editable: false, type: "boolean" }
+                            , LastUpdated: { editable: false, type: "date", format: "MM/dd/yyyy", parse: function (value) { return parseUTCDate(value) } }
+                        }
+                    }
+                    //, parse: function (data) {
+                    //    if (type(data) === "array") {
+                    //        $.each(data, function (index, ele) {
+                    //            ele.Metadata = ele.Metadata || {};
+                    //        });
+                    //    } else {
+                    //        data.Metadata = data.Metadata || {};
+                    //    }
+                    //    return data;
+                    //}
+
+                    , total: function (data) { return data.length; }
+                }
+                , requestEnd: function (e) {
+                    kendo.ui.progress($(".k-grid"), false);
+                }
+                , requestStart: function (e) {
+                    kendo.ui.progress($(".k-grid:visible"), true);
+                }
+                , serverPaging: false
+                , serverSorting: false
+                , serverFiltering: false
+                , pageSize: 15
+                , error: function (e) {
+                    //http://www.telerik.com/forums/rows-disappeared-from-grid-on-delete-fail
+                    $("#kGrid").data("kendoGrid").cancelChanges();
+                    alert("Error...");
+                }
+            });//end dataSource
+        }//end DataSource()
+
+        // ===========================================================================================================================================================
+
+        //// FOR INLINE EDITING...
+        //function timezoneDropDownEditor(container, options) {
+        //    $('<input name="TimeZone" required data-text-field="TimeZoneName" data-value-field="TimeZoneName" data-bind="value:' + options.field + '"/>')
+        //        .appendTo(container)
+        //        .kendoDropDownList({
+        //            autoBind: false,
+        //            dataSource: dsTimeZones,
+        //            dataTextField: "TimeZoneName",
+        //            dataValueField: "TimeZoneName",
+        //            valuePrimitive: true
+        //        });
+        //}
+
+        // ===========================================================================================================================================================
+
+        function masterclientFilter(ele) {
+            ele.kendoDropDownList({
+                dataSource: dsMasterClients
+               , dataTextField: "Name"
+               , dataValueField: "ID"
+               , optionLabel: "--Select--"
+            }).data("kendoDropDownList").wrapper.width("250px");
+        }
+
+        function integrationFilter(ele) {
+            ele.kendoDropDownList({
+                dataSource: dsIntegrations
+               , dataTextField: "Name"
+               , dataValueField: "ID"
+               , optionLabel: "--Select--"
+            }).data("kendoDropDownList").wrapper.width("250px");
+        }
+
+        function countryFilter(ele) {
+            ele.kendoDropDownList({
+                dataSource: dsCountries
+               , dataTextField: "Name"
+               , dataValueField: "ID"
+               , optionLabel: "--Select--"
+            }).data("kendoDropDownList").wrapper.width("250px");
+        }
+
+        function timezoneFilter(ele) {
+            ele.kendoDropDownList({
+                dataSource: dsTimeZones
+               , dataTextField: "Name"
+               , dataValueField: "ID"
+               , optionLabel: "--Select--"
+            }).data("kendoDropDownList").wrapper.width("250px");
+        }
+
+        var tplcheck = kendo.template($("#tplCheck").html());
+        
+        fnTemplateCheck = function (value) {            
+            var htm = tplcheck({
+                Val: value
+            });
+            return htm;
+        }
+
+        fnTemplateData = function (dsName, idField) {
+            var ds = eval(dsName);
+            var htm = tplData({ DataSource: ds.data(), ID: idField });
+            return htm;
+        }
+
+    });
+ 
+</script>
+}
+
+<script id="tplTimeZones" type="text/html">
+<div id='lyrTimeZoneEdit' class="lyrEdit">
+    <div class="control-group">                            
+        <label for="AdvertiserName" class="control-label">Advertiser Name:</label>
+        <div class="controls"><input type="text" class="required form-control" id="AdvertiserName" style="width:375px; height: 34px" name="AdvertiserName" data-bind="value: AdvertiserName" /></div>                                
+    </div>
+    <div class="control-group">
+        <label for="TimeZone" class="control-label">Time Zone:</label>
+        <div class="controls"><input type="text" id="TimeZone" style="width: 400px; height:34px" class="form-control" name="TimeZone" data-bind="value: TimeZone" /></div>
+    </div>
+</div>
+</script>
+
+<script>
+    function trimText(txt, len) {
+        if (!txt)
+            return '';
+        if (txt.length > len)
+            return txt.substring(0, len) + '...';
+        else
+            return txt;
+    }
+</script>
+
+<script id="tplCheck" type="text/x-kendo-template">
+    #
+    var iconClass = "glyphicon glyphicon-ok green";
+    if(!Val) {
+    iconClass = "glyphicon glyphicon-remove red";
+    }
+    #
+    <div style='text-align:center'><i class="#=iconClass#">&nbsp;</i></div>
+</script>
+
+<script id="tplDataDisplayName" type="text/x-kendo-template">
+    <div>
+        # var obj = $.grep(DataSource, function(ele,id){return ele.ID == ID});
+        if(obj.length == 1){
+        #
+        #=obj[0].Name#
+        #}#
+    </div>
+</script>

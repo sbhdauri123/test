@@ -1,0 +1,192 @@
+﻿@{
+    ViewBag.Title = "Regex Builder";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="ghMain" id="userTableContainer">
+    <div id="gridContainer" class="toolControlContainer tc-Main">
+        <header>
+            <h2>Regex Builder</h2>            
+        </header>
+        <div id="regexMain" class="toolControl">
+            <br />
+            <div>
+                <div class="control-group">                            
+                    <label for="FileName" class="control-label">File Name:</label>
+                    <div class="controls"><input type="text" id="FileName" class="required form-control" style="width:400px;" name="FileName" /></div>                                
+                </div>
+                <div class="control-group">                            
+                    <label for="Delimiter" class="control-label">Delimiter:</label>
+                    <div class="controls"><input id="Delimiter" class="required" style="width:150px" name="Delimiter" class="required"
+                         data-role="dropdownlist" data-bind="source: dsDelimters" data-text-field="Name" data-value-field="ID" data-option-label="--Select Delimiter--"/>
+                    </div>                                
+                </div>
+                <div class="control-group">                            
+                    <label for="Delimiter" class="control-label">&nbsp;</label>
+                    <div class="controls">
+                        <div id="btnSplit" class="btn btn-primary" data-bind="events: { click: btnSplitClick }">Go</div>
+                    </div>                                
+                </div>
+                <div class="control-group" data-bind="visible: isRegexVisible() ">                            
+                    <label for="Delimiter" style="font-weight:bold" class="control-label">Regular Expression: </label>
+                    <div class="controls">
+                        <div id="regexExpr" style="font-weight:bold;font-size:16px;" data-bind="text: regexExpr,html:regexExpr"  disabled="disabled"></div>
+                    </div>                                
+                </div> 
+            </div>          
+           <div class="form-horizontal">
+               <div id="splitForm" />
+               <br />
+            </div>
+        </div>  
+      
+    </div>
+</div>
+
+@section scripts{
+<script type="text/javascript">
+
+    $(function ()
+    {
+        var viewModel = GetDatasource();
+        kendo.bind($("#regexMain"), viewModel);
+        
+        function GetDatasource()
+        {
+            var vm = kendo.observable({
+            	dsRegexTypes: [{ Name: "Date" },
+								{ Name: "Entity" },
+								{ Name: "Exact" },
+								{ Name: "FileType" },
+								{ Name: "Ignore" }]
+            , dsDelimters: [{ Name: "-" }, { Name: "_" }]
+            , regexExpr: ""
+            , isRegexVisible: function ()
+            {
+                return this.get("regexExpr").length > 1;
+            }
+            , btnSplitClick: function (e)
+            {
+                var that = this;
+                var strFileName = $("#FileName").val().trim();
+                var delimiter = $("#Delimiter").val().trim();
+                var splitForm = $("#splitForm");
+                that.set("regexExpr", "");
+
+                $(splitForm).children().remove();
+
+                if (!strFileName || !delimiter)
+                {                    
+                    e.preventDefault();
+                    return false;
+                }
+
+                //that.dsRegexTypes.fetch();
+
+                var tpl = kendo.template($("#tplDropDown").html());
+
+                //remove file extension from string before splitting by delimiter
+                var splitString = strFileName.split(".", 1)[0].split(delimiter);
+                
+                var arrval = splitString.map(function (itemVal, i)
+                {
+                    return { Index: i+1, Name: itemVal };
+                });
+
+                var html = kendo.render(tpl, arrval);
+
+                splitForm.html(html);
+
+                kendo.bind(splitForm, that);
+            }
+            , ddlChange: function (e)
+            {
+                if (e.sender.selectedIndex == 0)
+                {
+                    e.preventDefault();
+                    return false;
+                }
+                var regexExpr = [];
+                $(splitForm).find("[data-role=dropdownlist]").each(function (i, item)
+                {
+                    var ddlVal = item.value;
+                    var tb = $(item).parents().find("input[type='text']");                    
+                    var color = "#" + tb.attr("data-color");
+                    var tbVal = tb.val();
+
+                    //Bind regexpr section to inputs color, for visible clarity
+                    var regexVal = "<span style='color:" + color + "'>";
+                    switch (ddlVal)
+                    {
+                        case "Date":
+                            var dateDelimiter = tbVal.match(/[\_\/\-]/);
+                            var arrDateVals = tbVal.split(dateDelimiter);
+                            var arrDateFormat = [];
+
+                            $.each(arrDateVals, function (j, dateVal)
+                            {
+                                if (dateVal.length > 2)
+                                    arrDateFormat.push("(\\d{4})");
+                                else
+                                    arrDateFormat.push("(\\d{1,2})");
+                            });
+
+                            var strDate = "(?&lt;FileDateTime&gt;" + arrDateFormat.join("\\" + dateDelimiter) + ")";
+                            regexVal += strDate;
+                            break;
+                        case "Entity":
+                            regexVal += "(?&lt;EntityID&gt;(\d{1,10}))";
+                            break;
+                        case "FileType":
+                            regexVal+="(?&lt;FileType&gt;("+tbVal+"))";
+                            break
+                        case "Ignore":
+                            regexVal += "(.+)";
+                            break
+                        case "Number":
+                            regexVal+="\d{1,10}";
+                            break;
+                        default:
+                            regexVal+= "("+tbVal +")";
+                    } //end switch
+                    regexVal += "</span>";
+                    regexExpr.push(regexVal);
+                });
+                                
+                //check if input filename has file extension specified
+                var strFileName = $("#FileName").val().trim();
+                var fileExtension = "";
+                
+                if (/\./.test(strFileName))
+                {
+                    var splitString = strFileName.split(".");
+                    splitString.shift();
+                    fileExtension = "\\." + splitString.join("\\.");
+                }
+
+                this.set("regexExpr", regexExpr.join("_") + fileExtension);
+            }
+            });
+            return vm;
+        }
+
+    });
+</script>
+
+<script type="text/html" id="tplDropDown">    
+    #
+    if(data) {    
+    var guid = kendo.guid(); 
+    var randomColor = Math.floor(Math.random()*16777215).toString(16);
+   
+    #
+    <div class="control-group" data-uid="#=guid#">                            
+        <label class="control-label"><span class="label" style="padding:5px 5px 5px 5px;background-color:\##=randomColor#">Component #=Index#:</span></label>
+        <div class="controls">
+            <input  name="tb#=guid#" type="text" style="width:300px" value="#=Name#" readonly="readonly" data-color="#=randomColor#"/>
+            <input  name="ddl#=guid#" class="kendoDropDownList" data-role="dropdownlist" data-text-field="Name" data-value-field="Name"  data-auto-bind="false" data-option-label="--Select--" data-bind="source: dsRegexTypes, events: { change: ddlChange }" style='width:150px'/>                        
+        </div>                                
+    </div>                  
+    #}#
+</script>
+}

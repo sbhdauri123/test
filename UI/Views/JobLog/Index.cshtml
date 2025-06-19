@@ -1,0 +1,166 @@
+﻿
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Job Logs";
+
+    var autoRefreshIntervals = new Dictionary<string, int>
+                           {
+                               {"10 seconds", 10},
+                               {"30 seconds", 30},
+                               {"minute", 60},
+                               {"2 minutes", 120},
+                               {"5 minutes", 300},
+                               {"10 minutes", 600}
+                           };
+
+    var autoRefreshSelectItems = new List<SelectListItem> { new SelectListItem { Text = "Off", Value = "0" } };
+    autoRefreshSelectItems.AddRange(autoRefreshIntervals.Select(a => new SelectListItem { Text = "Every " + a.Key, Value = a.Value.ToString() }));
+
+    var autoRefreshSelectItemsModal = new List<SelectListItem> { new SelectListItem { Text = "Off", Value = "0" } };
+    autoRefreshSelectItemsModal.AddRange(autoRefreshIntervals.Select(a => new SelectListItem { Text = "Every " + a.Key, Value = a.Value.ToString() }));
+}
+
+
+<style>
+    .container {
+        width: 100%;
+    }
+</style>
+
+<div class="ghMain" id="pageContainer">
+    <div id="jobLogContainer" class="toolControlContainer tc-Main">
+        <header>
+            <h2>Job Logs</h2>
+        </header>
+        <div>
+            <br /><br />
+            <div id="grid" class="toolControl">
+                <div id="jobLogGrid" class="toolControl">
+
+                </div>
+                <div id="refreshGrid" class="toolControl">
+                    <div class="toolBarItem">
+                        Auto Refresh:
+                        @Html.DropDownList("autoRefresh", autoRefreshSelectItems, new { id = "autoRefreshSelect" })
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+    <div id="dialog">
+        <div id="child"></div>
+    </div>
+</div>
+
+
+
+@* JOB LOG MODAL CODE*@
+
+
+<div id="details"></div>
+
+
+<script type="text/x-kendo-template" id="template">
+    <div id="details-container" class="toolControlContainer tc-Main">
+        <h4>
+            Source : #= SourceName #<br />
+            #if (IntegrationName.length > 0) {#
+            Integration : #= IntegrationName #
+            #}#
+
+        </h4>
+
+        <div id="modalgrid" class="toolControl"></div>
+
+        <div id="refreshGridModal" class="toolControl">
+            <div class="toolBarItem">
+                Auto Refresh:
+                @Html.DropDownList("autoRefreshModal", autoRefreshSelectItemsModal, new { id = "autoRefreshSelectModal" })
+            </div>
+        </div>
+
+    </div>
+</script>
+
+<script>
+    function trimText(txt, len) {
+        if (!txt)
+            return '';
+        if (txt.length > len)
+            return txt.substring(0, len) + '...';
+        else
+            return txt;
+    }
+</script>
+
+<style type="text/css">
+
+    #details-container {
+        padding: 10px;
+    }
+
+        #details-container h2 {
+            margin: 0;
+        }
+
+        #details-container em {
+            color: #8c8c8c;
+        }
+
+        #details-container dt {
+            margin: 0;
+            display: inline;
+        }
+</style>
+
+
+
+<script type="text/x-kendo-template" id="StatusTemplate">    
+    #let errorCount= (JobStatus == "Error"|JobStatus == "Warning") ? "(" + LogCount + ")":"";#
+    <span class="DataStatus #= JobStatus #">#=JobStatus# #=errorCount#</span>
+</script>
+
+
+<script type="text/x-kendo-template" id="JobGUIDTemplate">
+    <div class="jobGuid" data-jobguid="#=JobGUID#">
+        <a target="_blank" href="https://corinfsplk-ue1p.cloud.vivaki.com/en-US/app/search/search?q=#=SearchSplunk#">Logs</a>
+    </div>
+</script>
+
+<script src="~/Scripts/Greenhouse/common.js"></script>
+<script type="text/javascript" src="~/Scripts/joblog/index.js"></script>
+
+<style>
+
+    #jobLogGrid.k-grid td .DataStatus {
+        color: red;
+    }
+
+        #jobLogGrid.k-grid td .DataStatus.Complete {
+            color: black;
+        }
+
+        #jobLogGrid.k-grid td .DataStatus.Running {
+            color: green;
+        }
+
+        #jobLogGrid.k-grid td .DataStatus.Warning {
+            color: orange;
+        }
+
+        #jobLogGrid.k-grid td .DataStatus.Pending, #grid.k-grid td .DataStatus.Throttled {
+            color: #990;
+        }
+
+    a.k-button.k-button-icontext.k-grid-details {
+        min-width: 0;
+        background-color: transparent;
+        border-style: none
+    }
+
+        a.k-button.k-button-icontext.k-grid-details:active {
+            /*border-style: outset;
+        border: none;*/
+        }
+</style>

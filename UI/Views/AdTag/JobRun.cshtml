@@ -1,0 +1,105 @@
+﻿@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Job Runs";
+
+    var autoRefreshIntervals = new Dictionary<string, int>
+                                   {
+                                       {"30 seconds", 30},
+                                       {"minute", 60},
+                                       {"2 minutes", 120},
+                                       {"5 minutes", 300},
+                                       {"10 minutes", 600}
+                                   };
+
+    var autoRefreshSelectItems = new List<SelectListItem> { new SelectListItem { Text = "Off", Value = "0" } };
+    autoRefreshSelectItems.AddRange(autoRefreshIntervals.Select(a => new SelectListItem { Text = "Every " + a.Key, Value = a.Value.ToString() }));    
+}
+
+<style>
+    .container {
+        width: 100%;
+    }
+</style>
+
+<div class="ghMain" id="pageContainer">
+    <div id="jobRunContainer" class="toolControlContainer tc-Main">
+        <header>
+            <h2>Job Runs</h2>
+        </header>
+        <div>
+            <br /><br />
+            <div id="grid" class="toolControl">
+                <div id="jobRunGrid" class="toolControl">
+
+                </div>
+                <div id="refreshGrid" class="toolControl">
+                    <div class="toolBarItem">
+                        Auto Refresh:
+                        @Html.DropDownList("autoRefresh", autoRefreshSelectItems, new { id = "autoRefreshSelect" })
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+    <div id="dialog">
+        <div id="child"></div>
+    </div>
+</div>
+
+<script>
+    function trimText(txt, len) {
+        if (!txt)
+            return '';
+        if (txt.length > len)
+            return txt.substring(0, len) + '...';
+        else
+            return txt;
+    }
+</script>
+
+<script id="tplStatus" type="text/x-kendo-template">
+    <span class="DataStatus #= Val #">#=Val#</span>
+</script>
+
+<script id="tplYesNo" type="text/x-kendo-template">
+    #
+    var textValue = "Yes";
+    if(!Val) {
+    textValue = "No";
+    }
+    #
+    <div style='text-align:center'>#=textValue#</div>
+</script>
+
+<script src="~/Scripts/Greenhouse/common.js"></script>
+<script type="text/javascript" src="~/Scripts/AdTag/jobRun.js"></script>
+
+<style>
+    #jobRunGrid.k-grid td .DataStatus {
+        color: red;
+    }
+
+        #jobRunGrid.k-grid td .DataStatus.Complete {
+            color: black;
+        }
+
+        #jobRunGrid.k-grid td .DataStatus.Running {
+            color: green;
+        }
+
+        #jobRunGrid.k-grid td .DataStatus.Pending, #grid.k-grid td .DataStatus.Throttled {
+            color: #990;
+        }
+
+    a.k-button.k-button-icontext.k-grid-details {
+        min-width: 0;
+        background-color: transparent;
+        border-style: none;
+    }
+
+        a.k-button.k-button-icontext.k-grid-details:active {
+            /*border-style: outset;
+        border: none;*/
+        }
+</style>

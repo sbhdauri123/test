@@ -1,0 +1,76 @@
+﻿
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Job Queue";
+}
+
+<style>
+    .container {
+        width: 100%;
+    }
+</style>
+
+<div class="ghMain" id="pageContainer">
+    <div id="jobQueueContainer" class="toolControlContainer tc-Main">
+        <header>
+            <h2>Job Queue</h2>
+        </header>
+        <div>
+            <br /><br />
+            <div id="grid" class="toolControl">
+                <div id="filters">
+                    Last Updated (UTC): <input id="ddl" />
+                    <input type="button" id="clearFilterButton" class="k-button" value="Clear Filters" style="float:right"/>
+                </div>
+                <div id="jobQueueGrid" class="toolControl"></div>
+                <div id="refreshGrid" class="toolControl">
+                    <div class="toolBarItem">
+                        Auto Refresh: <input id="ddlAutoRefresh" /><br />
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="dialog">
+        <div id="child"></div>
+    </div>
+</div>
+
+<script type="text/x-kendo-template" id="StatusTemplate">
+    <span class="DataStatus #= Status #">
+        #=Status# <a target="_blank" href="https://corinfsplk-ue1p.cloud.vivaki.com/en-US/app/search/search?q=#=SearchSplunk#"><span class="fa fa-external-link fa-fw"></span></a>
+    </span>
+</script>
+
+<script src="~/Scripts/Greenhouse/common.js"></script>
+<script type="text/javascript" src="~/Scripts/jobQueue/index.js"></script>
+
+<style>
+
+    #jobQueueGrid.k-grid td .DataStatus {
+        color: red;
+    }
+
+        #jobQueueGrid.k-grid td .DataStatus.Complete {
+            color: black;
+        }
+
+        #jobQueueGrid.k-grid td .DataStatus.Running {
+            color: green;
+        }
+
+        #jobQueueGrid.k-grid td .DataStatus.Pending, #grid.k-grid td .DataStatus.Throttled {
+            color: #990;
+        }
+
+    a.k-button.k-button-icontext.k-grid-details {
+        min-width: 0;
+        background-color: transparent;
+        border-style: none
+    }
+
+        a.k-button.k-button-icontext.k-grid-details:active {
+            /*border-style: outset;
+        border: none;*/
+        }
+</style>

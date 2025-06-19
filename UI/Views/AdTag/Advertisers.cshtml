@@ -1,0 +1,493 @@
+﻿@{
+    ViewBag.Title = "Advertiser Adminstration";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="dragoMain" id="userTableContainer">
+    <div id="gridContainer" class="toolControlContainer tc-Main">
+        <header>
+            <h2>Advertiser Administration</h2>
+            <div id="ddlDataSources"></div>
+        </header>
+        <div id="kGrid" class="toolControl">
+        </div>
+    </div>
+</div>
+
+@section scripts
+{
+    <script src="~/Scripts/Greenhouse/common.js"></script>
+    <script type="text/javascript">
+
+
+    $(function ()
+    {
+        // ===========================================================================================================================================================
+
+        var url = "/advertiserHub";
+
+        var advertiserHub = new signalR.HubConnectionBuilder()
+        .withUrl(url, {
+            transport: signalR.HttpTransportType.LongPolling
+        })
+        .build();
+
+        async function start() {
+            try {
+                    await advertiserHub.start();
+                    console.log("advertiserHub Connected.");
+            } catch (err) {
+                console.log(err);
+                setTimeout(start, 5000);
+            }
+        };
+
+        advertiserHub.onclose(async () => {
+            await start();
+        });
+
+        // Start the connection.
+        var hubStart = start();
+
+        var ddlDataSources = $("header").find("#ddlDataSources").kendoDropDownList({
+            dataSource: GetDataSource("GetGreenhouseDataSources", "AdVendorID", "AdVendorName") //"DataSourceID", "DataSourceName")
+            , dataTextField: "Name"
+            , dataValueField: "ID"
+            , optionLabel: "--Select Source--"
+            , change: function ()
+            {
+                var val = this.value();
+                if (val) {
+                    //grid.destroy();
+                    $("#kGrid").empty();
+                    createGrid();
+                    grid.dataSource.read({ data: val });
+                    grid.thead.show();
+                }
+                else {
+                    grid.thead.hide();
+                    grid.dataSource.data([]);
+                }
+            }
+        }).data("kendoDropDownList");
+        ddlDataSources.list.width("auto");
+
+        // ===========================================================================================================================================================
+        var tplyesno = kendo.template($("#tplYesNo").html());
+
+        var grid, createGrid = function () {
+
+            grid = $("#kGrid").kendoGrid({
+                dataSource: APIAdServerRequestDataSource()
+                , autoBind: false
+                , columns: [
+                     {
+                         command: [
+                             { name: "edit", text: "edit", template: "<a class='btn-small lnkEdit'><i class='fa fa-pencil-square-o grid-edit-link'></i></a>", width: 10 }
+                         ], width: "130px"
+                         , title: "<button id='btnAdd' class='btn btn-primary'>Add Advertiser</button>"
+                         , menu: false
+                     }
+                   , { hidden: true, field: "APIAdServerRequestID" }
+                   , {
+                       field: "AdvertiserName", title: "Advertiser Name", width: "300px"
+                       //, editor: function (element, options) { element.text(options.model.AdvertiserName) }
+                       , filterable: { ui: advertiserFilter }
+                   }
+
+                   , {
+                       field: "UserName", title: "User Name", width: "250px"
+                       //, editor: function (element, options) { element.text(options.model.AdvertiserName) }
+                       , filterable: { ui: userFilter }
+                   }
+                   , {
+                       field: "ProfileID", title: "Profile ID", width: "150px"
+                       //, editor: function (element, options) { element.text(options.model.AdvertiserName) }
+                       , filterable: { ui: profileidFilter }
+                   }
+
+                   , {
+                       field: "IsActive", title: "Active?", width: "100px", template: '#=fnTemplateYesNo(IsActive)#',
+                       filterable: {
+                           multi: true,
+                           checkAll: false,
+                           itemTemplate: function (ee) {
+                               return "<div><input type='checkbox' name='rb" + ee.field + "' value='#=data.IsActive#'/># if(data.IsActive) {#Yes#}else{#No#}#</div>";
+                           }
+                       }
+                   }
+                   , {
+                       field: "IsOutputToReport", title: "Testing?", width: "110px", template: '#=fnTemplateYesNo(IsOutputToReport)#',
+                       filterable: {
+                           multi: true,
+                           checkAll: false,
+                           itemTemplate: function (ee) {
+                               return "<div><input type='checkbox' name='rb" + ee.field + "' value='#=data.IsOutputToReport#'/># if(data.IsOutputToReport) {#Yes#}else{#No#}#</div>";
+                           }
+                       }
+                   }
+                   , {
+                       field: "WriteToReportStatus", title: "Test On?", width: "120px", template: '#=fnTemplateYesNo(WriteToReportStatus)#',
+                       filterable: {
+                           multi: true,
+                           checkAll: false,
+                           itemTemplate: function (ee) {
+                               return "<div><input type='checkbox' name='rb" + ee.field + "' value='#=data.WriteToReportStatus#'/># if(data.WriteToReportStatus) {#Yes#}else{#No#}#</div>";
+                           }
+                       }
+                   }
+                   , {
+                       field: "TagVersion", title: "Tag Version", width: "150px",
+                       filterable: { ui: tagVersionFilter }
+                   }
+                   , { field: "PASDetail", title: "3PAS Detail", width: "250px" }
+                ]
+                , editable: {
+                    mode: "popup"
+                    , edit: true
+                    , create: true
+                    , template: $("#advertiserTemplate").html()
+                }
+                , dataBound: OnGridDataBind
+                , edit: function (evt) {
+                    //Passing the selected DataSource Value (AdVendorID) to the model.
+                    evt.model.AdVendorID = ddlDataSources.value();
+
+                    updateCheckBoxes();
+
+                    onEdit(evt);
+                    var container = evt.container;
+                    container.width("600").height("760");
+
+                    var win = container.data("kendoWindow");
+                    win.center();
+                    var title = (evt.model.AdvertiserName == "") ? "Add New Advertiser" : "Editing [" + evt.model.AdvertiserName + "]";
+                    //console.log("title", title);
+                    win.title(title);
+
+                    SetValidationAdvertiser(container);
+                    win.center().open();
+                }
+                , save: function (evt) {
+
+                    var container = evt.container;
+                    var validator = evt.container.find(".lyrEdit").data("kendoValidator");
+                    if (!validator.validate())
+                        evt.preventDefault();
+
+                    evt.model.IsOutputToReport = container.find('#isOutputToReport').prop("checked");
+                    evt.model.WriteToReportStatus = container.find('#writeToReportStatus').prop("checked");
+
+                    //check if the row is being edited and not newly added
+                    if (!evt.model.isNew()) {
+                        if (!confirm("Are you really sure that you want to update the data ?")) {
+                            //In the confirm box, if the user clicks no or cancel, then do not proceed with the updation of record
+                            e.preventDefault();
+                        }
+                    }
+                }
+               , sortable: { mode: "multiple" }
+               , filterable: {
+                   extra: false,
+                   operators: {
+                       string: {
+                           contains: "Contains",
+                           eq: "Is equal to",
+                           neq: "Is not equal to"
+                       }
+                   }
+               }
+               , resizable: true
+               , pageable: true
+               , scrollable: true
+            }).data("kendoGrid");
+        };
+
+        createGrid();
+
+        grid.wrapper.height("570px");
+        grid.thead.hide(); //hide grids columns on initial load
+
+        // Used to make AdvertiserName non-editable
+        function onEdit(e) {
+            if (e.model.APIAdServerRequestID !== 0)
+                $("#initialPlacementId").attr("readonly", true);
+
+        }
+
+        // ===========================================================================================================================================================
+
+        function SetValidationAdvertiser(container) {
+            var validator = container.find("#lyrEditAdvertiser").kendoValidator({
+                rules: {
+                    required: function (input) {
+                        if (input.is("[class*='required']")) {
+                            if (!$.trim(input.val()))
+                                return false;
+                            return true;
+                        }
+                        return true;
+                    },
+                    urlvalid: function (input) {
+                        if (input.is("[class*='urlvalid']")) {
+                            if (!ValidUrl(input.val()))
+                                return false;
+                            return true;
+                        }
+                        return true;
+                    }
+                }//end rules
+                , messages: {
+                    required: "* required",
+                    urlvalid: "* check url"
+                }
+                , validateOnBlur: false
+            });
+        }
+
+        function APIAdServerRequestDataSource() {
+            return new kendo.data.DataSource({
+                type: "signalr",
+                autoSync: false,
+                transport: {
+                    signalr: {
+                        promise: hubStart,
+                        hub: advertiserHub,
+                        server: {
+                            read: "readAll"
+			                , create: "processAdvertiser"
+			                , update: "processAdvertiser"
+                        },
+                        client: {
+                            read: "readAll"
+			                , create: "processAdvertiser"
+			                , update: "processAdvertiser"
+                        }
+                    }
+                    , parameterMap: function (option, type) {
+                        if (type != "read") {
+                            if (type == "create") {
+                                option.GUID = kendo.guid();
+                            }
+                        }
+                        else {
+                            if (option.data != null)
+                                option = option.data.toString(); //data set by source dropdown, and controller expecting param strings[]
+                        }
+                        return option;
+                    }
+                },
+                schema: {
+                    model: {
+                        id: "APIAdServerRequestID",
+                        fields: {
+                            APIAdServerRequestID: { type: "number" }
+                            , AdvertiserName: { editable: true, type: "string" }
+                            , TagVersion: { editable: true, type: "string" }
+                            , PASDetail: { editable: true, type: "string" }
+                            , PairDelimiter: { editable: true, type: "string" }
+                            , KeyValueDelimiter: { editable: true, type: "string" }
+                            , IsActive: { editable: true, type: "boolean" }
+                            , IsOutputToReport: { editable: true, type: "boolean" }
+                            , WriteToReportStatus: { editable: true, type: "boolean" }
+                            , AccountID: { editable: true, type: "string" }
+                            , AdvertiserID: { editable: true, type: "string" }
+                            , InitialPlacementID: { editable: true, type: "number" }
+                            , UserName: { editable: true, type: "string" }
+                            , ProfileID: { editable: true, type: "number" }
+                            , AdVendorID: { editable: true, type: "number" }
+                        }
+                    }
+                }
+                , requestEnd: function (e) {
+                    kendo.ui.progress($(".k-grid"), false);
+                }
+                , requestStart: function (e) {
+                    kendo.ui.progress($(".k-grid:visible"), true);
+                }
+                , serverPaging: false
+                , serverSorting: false
+                , serverFiltering: false
+                , pageSize: 20
+                , error: function (e) {
+                    //http://www.telerik.com/forums/rows-disappeared-from-grid-on-delete-fail
+                    $("#kGrid").data("kendoGrid").cancelChanges();
+                    //alert("Error...");
+                }
+            });//end dataSource
+        }//end DataSource()
+
+        fnTemplateYesNo = function (value) {
+            var htm = tplyesno({
+                Val: value
+            });
+            return htm;
+        }
+
+        function advertiserFilter(element) {
+            var ds = filterGridData('AdvertiserName');
+            element.kendoComboBox({
+                dataSource: ds
+                , placeholder: "--Select an Advertiser--"
+
+            });
+        }
+
+        function userFilter(element) {
+            var ds = filterGridData('UserName');
+            element.kendoComboBox({
+                dataSource: ds
+                , placeholder: "--Select a User--"
+
+            });
+        }
+
+        function profileidFilter(element) {
+            var ds = filterGridData('ProfileID');
+            element.kendoComboBox({
+                dataSource: ds
+                , placeholder: "--Select a Profile--"
+
+            });
+        }
+
+        function tagVersionFilter(element) {
+            var ds = filterGridData('TagVersion');
+            element.kendoComboBox({
+                dataSource: ds
+                , placeholder: "--Select a Tag Version--"
+
+            });
+        }
+
+        function filterGridData(field) {
+            var ds = $.unique(grid.dataSource.data().map(function getValues(obj, indx) {
+                return obj[field];
+            }).sort(function sortFilteredData(str1, str2) {
+                var a, b;
+                if (Boolean(str1) && Boolean(str2)) {
+                    a = str1.toLowerCase(); b = str2.toLowerCase();
+                }
+                else { a = ""; b = ""; }
+                return a < b ? -1 : a > b ? 1 : 0;
+            }));
+            return ds;
+        }
+    });
+
+    function updateCheckBoxes() {
+        isActive = document.getElementById('isActive');
+        isOutputToReport = document.getElementById('isOutputToReport');
+        writeToReportStatus = document.getElementById('writeToReportStatus');
+
+        if (!isActive.checked) {
+            isOutputToReport.checked = false;
+            isOutputToReport.disabled = true;
+            writeToReportStatus.checked = false;
+            writeToReportStatus.disabled = true;
+        } else {
+            isOutputToReport.disabled = false;
+            if (!isOutputToReport.checked) {
+                writeToReportStatus.checked = false;
+                writeToReportStatus.disabled = true;
+            } else {
+                writeToReportStatus.disabled = false;
+            }
+        }
+    }
+    </script>
+}
+
+<script id="advertiserTemplate" type="text/x-kendo-template">
+    <div id='lyrEditAdvertiser' class="lyrEdit">
+        <div class="control-group">
+            <label for="accountId" class="control-label" style="width:200px;">Account ID:</label>
+            <div class="controls"><input type="number" class="required form-control" id="accountId" style='width:525px;' name="accountId" data-bind="value:AccountID" /></div>
+        </div>
+
+        <div class="control-group">
+            <label for="advertiserId" class="control-label" style="width:200px;">Advertiser ID:</label>
+            <div class="controls"><input type="number" class="required form-control" id="advertiserId" style='width:525px;' name="advertiserId" data-bind="value:AdvertiserID" /></div>
+        </div>
+
+        <div class="control-group">
+            <label for="advertiserName" class="control-label" style="width:200px;">Advertiser Name:</label>
+            <div class="controls"><input type="text" class="required form-control" id="advertiserName" style='width:525px;' maxlength="255" name="advertiserName" data-bind="value:AdvertiserName" /></div>
+        </div>
+
+        <div class="control-group">
+            <label for="userName" class="control-label" style="width:200px;">User Name:</label>
+            <div class="controls"><input type="text" class="required form-control" id="userName" style='width:525px;' maxlength="255" name="userName" data-bind="value:UserName" /></div>
+        </div>
+
+        <div class="control-group">
+            <label for="profileID" class="control-label" style="width:200px;">Profile ID:</label>
+            <div class="controls"><input type="text" class="required form-control" id="profileID" style='width:525px;' maxlength="255" name="profileID" data-bind="value:ProfileID" /></div>
+        </div>
+
+        <div class="control-group">
+            <label for="tagVersion" class="control-label" style="width:200px;">Tracking Version:</label>
+            <div class="controls"><input type="text" class="required form-control" id="tagVersion" style='width:525px;' maxlength="10" name="tagVersion" data-bind="value:TagVersion" /></div>
+        </div>
+
+        <div class="control-group">
+            <label for="pairDelimiter" class="control-label" style="width:200px;">Pair Delimiter:</label>
+            <div class="controls"><input type="text" class="required form-control" id="pairDelimiter" style='width:525px;' maxlength="1" name="pairDelimiter" data-bind="value:PairDelimiter" /></div>
+        </div>
+
+        <div class="control-group">
+            <label for="keyValueDelimiter" class="control-label" style="width:200px;">Key-Value Delimiter:</label>
+            <div class="controls"><input type="text" class="required form-control" id="keyValueDelimiter" style='width:525px;' maxlength="1" name="keyValueDelimiter" data-bind="value:KeyValueDelimiter" /></div>
+        </div>
+
+        <div class="control-group">
+            <label for="initialPlacementId" class="control-label" style="width:200px;">Starting Placement ID:</label>
+            <div class="controls"><input type="number" class="required form-control" id="initialPlacementId" style='width:525px;' name="initialPlacementId" data-bind="value:InitialPlacementID" /></div>
+        </div>
+
+        <div class="control-group">
+            <label for="pasDetail" class="control-label" style="width:200px;">3PAS Detail:</label>
+            <div class="controls"><textarea id="pasDetail" class="form-control" style='width:545px; height: 80px;' maxlength="255" name="pasDetail" data-bind="value:PASDetail" /></div>
+        </div>
+
+        <div class="control-group">
+            <table>
+                <tr>
+                    <td align="center">
+                        <input type="checkbox" id="isActive" name="isActive" data-bind="checked: IsActive" onclick="updateCheckBoxes()" /><br />
+                        <label for="IsActive" class="control-label">Active?</label>
+                    </td>
+                    <td align="center">
+                        <input type="checkbox" id="isOutputToReport" name="isOutputToReport" data-bind="checked: IsOutputToReport" onclick="updateCheckBoxes()" /><br />
+                        <label for="isOutputToReport" class="control-label">Testing?</label>
+                    </td>
+                    <td align="center">
+                        <input type="checkbox" id="writeToReportStatus" name="writeToReportStatus" data-bind="checked: WriteToReportStatus" /><br />
+                        <label for="writeToReportStatus" class="control-label">Test On?</label>
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </div>
+</script>
+
+<script>
+    function trimText(txt, len) {
+        if (!txt)
+            return '';
+        if (txt.length > len)
+            return txt.substring(0, len) + '...';
+        else
+            return txt;
+    }
+</script>
+
+<script id="tplYesNo" type="text/x-kendo-template">
+    #
+    var textValue = "Yes";
+    if(!Val) {
+    textValue = "No";
+    }
+    #
+    <div style='text-align:center'>#=textValue#</div>
+</script>

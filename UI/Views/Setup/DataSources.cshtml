@@ -1,0 +1,248 @@
+﻿﻿@{
+    ViewBag.Title = "DataSources";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="dragoMain" id="userTableContainer">
+    <div id="gridContainer" class="toolControlContainer tc-Main">
+        <header>
+            <h2>Data Source Setup</h2>
+        </header>
+        <div id="kGrid" class="toolControl">
+        </div>
+    </div>
+</div>
+
+<script src="~/Scripts/Greenhouse/common.js"></script>
+<script type="text/javascript">
+
+$(function () {
+    var tplcheck = kendo.template($("#tplCheck").html());
+    var tplData = kendo.template($("#tplDataDisplayName").html());
+
+    var url = "/dataSourceHub";
+
+    var dataSourceHub = new signalR.HubConnectionBuilder()
+    .withUrl(url, {
+        transport: signalR.HttpTransportType.LongPolling
+    })
+    .build();
+
+    var dsJobCategories = GetDataSource("GetJobCategories", "JobCategoryID", "JobCategoryName");
+    dsJobCategories.fetch();
+
+    $("#kGrid").kendoGrid({
+        dataSource: DataSourcesDataSource()
+        , columns: [
+                {
+                    command: [
+                        { name: "edit", text: "edit", template: "<a class='btn-small lnkEdit'><i class='fa fa-pencil-square-o grid-edit-link'></i></a>", width: 10 },
+                        { name: "destroy", text: "delete", template: "<a class='btn-small lnkDelete'><i class='fa fa-times grid-edit-link'></i></a>", width: 10 }
+                    ]
+                    , width: 150
+                    , title: "<button id='btnAdd' class='btn btn-primary'>Add Data Source</button>"
+                    , menu: false
+                }
+            , { field: "DataSourceName", title: "Data Source Name", width: "425px" }
+            , { field: "JobCategoryID", title: "Job Category", width: "275px", template: "#=fnTemplateData('dsJobCategories', JobCategoryID) #", filterable: { ui: jobcategoryFilter } }
+            //, { field: "CreatedDate", title: "Created", template: "#=kendo.toString(CreatedDate, 'G')#", width: "200px" }
+            , { field: "LastUpdated", title: "Last Updated", template: "#=kendo.toString(LastUpdated, 'G')#", width: "200px" }
+        ]
+        , editable: {
+            mode: "popup"
+            , edit: true
+            , destroy: true
+            , create: true
+            , confirmation: "Are you sure you want to delete this?"
+            , template: $("#tplDataSources").html()
+        }
+        , dataBound: OnGridDataBind
+        , edit: function (evt) {
+
+            var container = evt.container;
+            container.width("480").height("275");
+
+            var win = container.data("kendoWindow");
+            var title = (evt.model.DataSourceName == "") ? "Add New Data Source" : "Editing [" + evt.model.DataSourceName + "]";
+            console.log("title", title);
+            win.title(title);
+
+            var ddlJobCategories = container.find("#JobCategoryID");
+            ddlJobCategories.kendoDropDownList({
+                dataSource: dsJobCategories
+                //, autoBind:false
+                , dataTextField: "Name"
+                , dataValueField: "ID"
+                , optionLabel: "--Select a Job Category--"
+            });
+
+            SetValidation(container);
+            win.center().open();
+        }
+        , save: function (evt) {
+            var container = evt.container;
+            var validator = evt.container.find(".lyrEdit").data("kendoValidator");
+            if (!validator.validate())
+                evt.preventDefault();
+
+        }
+        , sortable: { mode: "multiple" }
+        , columnMenu: gridColumMenuOptions
+        , filterable: gridFilterOptions
+        , resizable: true
+        , pageable: true
+        , scrollable: true
+        //, selectable: true //
+    }).data("kendoGrid")
+    .wrapper.height("600px");
+
+    function DataSourcesDataSource() {
+        return new kendo.data.DataSource({
+        	type: "signalr",
+        	autoSync: false,
+        	transport: {
+        		signalr: {
+                    promise: dataSourceHub.start(),
+        			hub: dataSourceHub,
+        			server: {
+        				read: "readAsync"
+						, create: "create"
+						, destroy: "destroy"
+						, update: "update"
+        			},
+        			client: {
+        				read: "read"
+						, create: "create"
+						, destroy: "destroy"
+						, update: "update"
+        			}
+        		},
+        		parameterMap: function (option, type)
+        		{
+        			if (type === "create")
+        			{
+        				option.GUID = kendo.guid();
+        			} else if (type === "destroy")
+        			{
+        				//option.SettingsFields = option.SettingsFields.split(",");
+        				//option.SourceFileMetadataFields = option.SourceFileMetadataFields.split(",");
+        				//option.CustomPropertiesFields = option.CustomPropertiesFields.split(",");
+
+        			}
+
+        			return option;
+        		}
+        	}
+            , schema: {
+                model: {
+                    id: "DataSourceID"
+                    , fields: {
+                            DataSourceID: { type: "number" }
+                        , DataSourceName: { type: "string" }
+                            , JobCategoryID: { type: "number" }
+                        //, CreatedDate: { type: "date", format: "MM/dd/yyyy" }
+                        , LastUpdated: { type: "date", format: "MM/dd/yyyy", parse: function (value) { return parseUTCDate(value) } }
+                    }
+                }
+                , total: function (data) { return data.length; }
+            }
+            , requestEnd: function (e) {
+                kendo.ui.progress($(".k-grid"), false);
+            }
+            , requestStart: function (e) {
+                kendo.ui.progress($(".k-grid:visible"), true);
+            }
+            , serverPaging: false
+            , serverSorting: false
+            , serverFiltering: false
+            , pageSize: 20
+            , error: function (e) {
+                if (e.xhr.toString().indexOf("Error: The DELETE") != -1) {
+                    //http://www.telerik.com/forums/rows-disappeared-from-grid-on-delete-fail
+                    $("#kGrid").data("kendoGrid").cancelChanges();
+                    alert("This record can not be deleted because there are associated elements. Please delete all associated elements first.");
+                }
+            }
+        });//end dataSource
+    }//end DataSource()
+
+    function jobcategoryFilter(ele) {
+        ele.kendoDropDownList({
+            dataSource: dsJobCategories
+           , dataTextField: "Name"
+           , dataValueField: "ID"
+           , optionLabel: "--Select--"
+        }).data("kendoDropDownList").wrapper.width("250px");
+    }
+
+    fnTemplateCheck = function (value) {
+        //var isChecked = (value != '0') || (value === true);
+        var htm = tplcheck({
+            Val: value //isChecked
+        });
+        return htm;
+    }
+
+    fnTemplateData = function (dsName, idField) {
+        var ds = eval(dsName);
+        var htm = tplData({
+            DataSource: ds.data(),
+            ID: idField
+        });
+        return htm;
+    }
+
+    function SetValidation(container) {
+        var validator = container.find(".lyrEdit").kendoValidator({
+            rules: {
+                required: function (input) {
+                    if (input.is("[class*='required']")) {
+                        if (!$.trim(input.val()))
+                            return false;
+                        return true;
+                    }
+                    return true;
+                }
+            }//end rules
+            , messages: {
+                required: "* required"
+            }
+            , validateOnBlur: false
+        });
+    }
+
+});
+</script>
+
+<script id="tplDataSources" type="text/x-kendo-template">
+    <div id='lyrEdit' class="lyrEdit">
+        <div class="control-group">
+            <label for="DataSourceName" class="control-label">Data Source Name</label>
+            <div class="controls"><input type="text" id="DataSourceName" class="required form-control" style="width: 375px; height: 34px;" name="DataSourceName" data-bind="value: DataSourceName" /></div>
+        </div>
+        <div class="control-group">
+            <label for="JobCategoryID" class="control-label">Job Category:</label>
+            <div class="controls"><input type="text" id="JobCategoryID" style="width: 400px; height:34px" class="required form-control" name="JobCategoryID" data-bind="value: JobCategoryID" /></div>
+        </div>
+    </div>
+</script>
+
+<script id="tplCheck" type="text/x-kendo-template">
+    #
+    var iconClass = "glyphicon glyphicon-ok green";
+    if(!Val) {
+    iconClass = "glyphicon glyphicon-remove red";
+    }
+    #
+    <div style='text-align:center'><i class="#=iconClass#">&nbsp;</i></div>
+</script>
+
+<script id="tplDataDisplayName" type="text/x-kendo-template">
+    <div>
+        # var obj = $.grep(DataSource, function(ele,id){return ele.ID == ID});
+        if(obj.length == 1){
+        #
+        #=obj[0].Name#
+        #}#
+    </div>
+</script>

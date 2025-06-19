@@ -1,0 +1,396 @@
+﻿@{
+    ViewBag.Title = "Lookup";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="dragoMain" id="userTableContainer">
+    <div id="gridContainer" class="toolControlContainer tc-Main">
+        <header>
+            <h2>Lookup Setup</h2>            
+        </header>
+        <div id="kGrid" class="toolControl">
+        </div>
+    </div>
+</div>
+
+@section scripts
+{
+    <script src="~/Scripts/Greenhouse/common.js"></script>
+    <script type="text/javascript">
+
+    $(function() {
+        var url = "/lookupHub";
+
+        var lookupHub = new signalR.HubConnectionBuilder()
+            .withUrl(url, {
+                transport: signalR.HttpTransportType.LongPolling
+            })
+            .build();
+        var tplData = kendo.template($("#tplDataDisplayName").html());
+        var tplcheck = kendo.template($("#tplCheck").html());
+
+        fnRenderPopoverColumn = kendo.template($("#tplPopoverColumn").html());
+
+        $("#kGrid").kendoGrid({
+                dataSource: lookupDataSource(),
+                columns: [
+                    {
+                        width: "100px",
+                        title: "<button id='btnAdd' class='btn btn-primary'>Add Lookup</button>",
+                        menu: false,
+                        template: "#=commandTemplate(IsEditable)#"
+                    }, {
+                        field: "Name",
+                        title: "Name",
+                        width: "170px"
+
+                    }, { field: "Value", title: "Value", width: "140px" }, {
+                        field: "IsEditable",
+                        title: "IsEditable",
+                        width: "100px",
+                        template: '#=fnTemplateCheck(IsEditable)#',
+                        filterable: {
+                            multi: true,
+                            checkAll: false,
+                            itemTemplate: function(ee) {
+                                return "<div><input type='checkbox' name='rb" +
+                                    ee.field +
+                                    "' value='#=data.IsEditable#'/># if(data.IsEditable) {# <i class='glyphicon glyphicon-ok green'/> #}else{# <i class='glyphicon glyphicon-remove red'/>#}#</div>";
+                            }
+                        }
+                    }, {
+                        field: "CreatedDate",
+                        title: "Created",
+                        template: "#=kendo.toString(CreatedDate, 'G')#",
+                        width: "200px"
+                    }, {
+                        field: "LastUpdated",
+                        title: "Last Updated",
+                        template: "#=kendo.toString(LastUpdated, 'G')#",
+                        width: "200px"
+                    }
+                ],
+                editable: {
+                    mode: "popup",
+                    edit:
+                        true,
+                    create:
+                        true,
+                    template:
+                        $("#tplLookup").html()
+                },
+                dataBound:
+                    OnGridDataBind,
+                edit: function(evt) {
+                    var container = evt.container;
+                    container.width("470").height("500");
+
+                    var win = container.data("kendoWindow");
+                    win.center();
+                    var title = (evt.model.Name == "")
+                        ? "Add New Lookup"
+                        : "Editing Lookup [" + evt.model.Name + "]";
+                    win.title(title);
+
+                    if (!evt.model.isNew())
+                        onEdit(evt);
+
+                    var isNewLookup = (evt.model.Name == "");
+                    if (isNewLookup) {
+                        evt.model.IsEditable = true;
+                    }
+
+                    SetValidation(container);
+
+                    evt.container.find(".k-grid-cancel").on("click",
+                        function(e) { //-
+                            //evt.sender.cancelChanges();
+                            evt.sender.dataSource.read();
+                        });
+                },
+                save: function(evt) {
+                    var container = evt.container;
+                    var validator = evt.container.find(".lyrEdit").data("kendoValidator");
+                    if (!validator.validate())
+                        evt.preventDefault();
+
+                },
+                sortable: {
+                    mode: "multiple"
+                },
+                columnMenu: gridColumMenuOptions,
+                filterable:
+                    gridFilterOptions,
+                resizable:
+                    true,
+                pageable:
+                    true,
+                scrollable:
+                    true
+            }).data("kendoGrid")
+            .wrapper.height("600px");
+
+        // ========================================================
+        // Used to make LookupName non-editable
+        function onEdit(e) {
+            $("#Name").attr("readonly", true);
+        }
+
+        // ========================================================
+        //THE FOLLOWING REFRESHES THE GRID UPON SAVE, BY RE-READING
+        var grid = $("#kGrid").data("kendoGrid");
+        grid.bind("save", onGridSave);
+
+        function onGridSave(e) {
+            e.sender.one("dataBound",
+                function() {
+                    e.sender.dataSource.read();
+                });
+        };
+        // ========================================================
+
+
+        fnTemplateCheck = function(value) {
+            var isChecked = (value != '0') || (value === true);
+            var htm = tplcheck({
+                Val: isChecked
+            });
+            return htm;
+        }
+
+        function lookupDataSource() {
+            return new kendo.data.DataSource({
+                type: "signalr",
+                autoSync: false,
+                transport: {
+                    signalr: {
+                        promise: lookupHub.start(),
+                        hub: lookupHub,
+                        server: {
+                            read: "read",
+                            create: "create",
+                            update: "update"
+                        },
+                        client: {
+                            read: "read",
+                            create: "create",
+                            update: "update"
+                        }
+                    },
+                    parameterMap: function(option, type) {
+                        if (type === "create") {
+                            //option.GUID = kendo.guid();
+                        }
+                        return option;
+                    }
+                },
+                schema: {
+                    model: {
+                        id: "Name",
+                        fields: {
+                            Name: { type: "string" },
+                            Value: { type: "string" },
+                            IsEditable: { type: "boolean" },
+                            CreatedDate: { type: "date", format: "MM/dd/yyyy", parse: function (value) { return parseUTCDate(value) }},
+                            LastUpdated: { type: "date", format: "MM/dd/yyyy", parse: function (value) { return parseUTCDate(value) }}
+                        }
+                    },
+                    total: function(data) { return data.length; }
+                },
+                requestEnd: function(e) {
+                    kendo.ui.progress($(".k-grid"), false);
+                },
+                requestStart: function(e) {
+                    kendo.ui.progress($(".k-grid:visible"), true);
+                },
+                serverPaging: false,
+                serverSorting: false,
+                serverFiltering: false,
+                pageSize: 15
+            }); //end dataSource
+        } //end DataSource()
+
+
+        function SetValidation(container) {
+            var validator = container.find(".lyrEdit").kendoValidator({
+                rules: {
+                    alphaNumeric: function(input) {
+                        if (input.is("[class *='alphaNumeric']")) {
+                            pattern = /^[a-z\d]+$/i;
+                            return (pattern.test(input.val()));
+                        }
+                        return true;
+                    },
+                    required: function(input) {
+                        if (input.is("[class*='required']")) {
+                            if (!$.trim(input.val()))
+                                return false;
+                            return true;
+                        }
+                        return true;
+                    },
+                    available: function(input) {
+                        if (!input.hasClass("unique"))
+                            return true;
+
+                        var inputs = container.find(".unique");
+                        var grid = $("#kGrid").data("kendoGrid");
+                        var arr = []
+                        inputs.each(function(i, a) {
+                            var str = { field: $(a).attr("id"), operator: "eq", value: $(a).val().toString() }
+                            arr.push(str);
+                        });
+
+                        var filteredSet = kendo.data.Query.process(grid.dataSource.data(), { filter: arr });
+                        return !(filteredSet.data.length > 1);
+                    }
+                } //end rules
+                ,
+                messages: {
+                    alphaNumeric: "* Alphanumeric values only",
+                    required: "* required",
+                    available: "* Name already exists. Please enter a different name."
+                },
+                validateOnBlur: false
+            });
+        }
+
+        fnTemplateData = function(dsName, idField) {
+            var ds = eval(dsName);
+            var htm = tplData({ DataSource: ds.data(), ID: idField });
+            return htm;
+        }
+
+        fnTemplateCheck = function(value) {
+            //var isChecked = (value == 0);
+            var htm = tplcheck({
+                Val: value //isChecked
+            });
+            return htm;
+        }
+        });
+    </script>
+}
+
+
+<script type="text/html" id="tableTemplate">
+    <div class="table-responsive">
+        <table class="table table-bordered">
+            <tr>
+                @*<th>Name</th>
+                <th>Value</th>*@
+            </tr>
+            <tbody>
+                **BODY**
+            </tbody>
+        </table>
+    </div>
+</script>
+
+
+<script type="text/x-kendo-template" id="accordionTemplate">
+    # if(data.Html && data.Header){
+    var guid = kendo.guid();#
+    <div class="panel-group" id="#=guid#" role="tablist" aria-multiselectable="true">
+        <div class="panel panel-default">
+            <div class="panel-heading" role="tab" id="headingOne#=guid#">
+                <h4 class="panel-title">
+                    <a role="button" data-toggle="collapse" data-parent="\##=guid#" href="\#id#=guid#" aria-expanded="true" aria-controls="collapseOne">
+                        #=data.Header#
+                    </a>
+                </h4>
+            </div>
+            <div id="id#=guid#" class="panel-collapse collapse" role="tabpanel" aria-labelledby="headingOne#=guid#">
+                <div class="panel-body"> #=data.Html#</div>
+            </div>
+        </div>
+    </div>
+    #}#
+</script>
+
+<script id="accordionTableTemplate" type="text/x-kendo-template">
+    # var accordionHtml = kendo.template($("\#accordionTemplate").html()); #
+    <div title="Click to view values">
+        #=accordionHtml({
+            Header: DisplayTitle ,
+            Html: Content
+        })#
+    </div>
+</script>
+
+
+
+<script id="tplPopoverColumnItemList" type="text/x-kendo-template">
+    #var ellipsisText = (Val.length >20) ? Val.substr(0,20)+'<b>...</b>': Val;#
+    <div class="popoversList" title="#=Title#" data-content="<div style='width:550px'>#=ListItems#</div>">#=ellipsisText#</div>
+</script>
+
+
+
+
+<script id="tplLookup" type="text/html">
+    <div id='lyrEditLookup' class="lyrEdit" style="align-content:center">
+        <div class="control-group">                            
+            <label for="Name" class="control-label" style="width:200px;">Name:</label>
+            <div class="controls"><input type="text" id="Name" class="required unique form-control" style="width:400px; height: 34px " name="Name" data-bind="value:Name" /></div>                                
+    </div>
+    <div class="control-group">                            
+        <label for="Value" class="control-label" style="width:200px;">Value:</label>
+        <div class="controls"><textarea id="Value" class="required form-control" style="width:400px; height: 80px " name="Value" data-bind="value:Value" /></div>                                
+    </div>
+</div>
+</script>
+
+<script id="tplCheck" type="text/x-kendo-template">
+	#
+	var iconClass = "glyphicon glyphicon-ok green";
+	if(!Val) {
+	iconClass = "glyphicon glyphicon-remove red";
+	}
+	#
+	<div style='text-align:center'><i class="#=iconClass#">&nbsp;</i></div>
+</script>  
+
+<script id="tplDataDisplayName" type="text/x-kendo-template">
+    <div>
+        # var obj = $.grep(DataSource, function(ele,id){return ele.ID == ID});
+        if(obj.length == 1){
+        #
+        #=obj[0].Name#
+        #}#
+    </div>
+</script>
+
+<script>
+    function trimText(txt, len) {
+        if (!txt)
+            return '';
+        if (txt.length > len)
+            return txt.substring(0, len) + '...';
+        else
+            return txt;
+    }
+
+    function commandTemplate(model) {
+
+        if (model) {
+            return "<a class='btn-small lnkEdit'><i class='fa fa-pencil-square-o grid-edit-link'></i></a>";
+        } else {
+            return "";
+        }
+    }
+</script>
+
+<script id="tplPopoverColumn" type="text/x-kendo-template">
+    #
+    if (!Val ) return "";
+    var ellipsisText = (Val.length >20) ? Val.substr(0,20)+'<b>...</b>': Val;
+    var panelTemplate=  kendo.template($("\#popOverPanelHTML").html());
+    var content = panelTemplate({Text: data.Val, Title: data.Title}, {useWithBlock:false});
+    #
+    <div class="tooltipped" title="#=Title#" data-content='#=content#'>#=ellipsisText#</div>
+</script>
+
+<script type="text/x-kendo-template" id="popOverPanelHTML">
+    <div class="k-block"><div class="k-header k-shadow">#=data.Title#</div>#=data.Text#</div>
+</script>
